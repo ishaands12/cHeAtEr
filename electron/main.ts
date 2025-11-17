@@ -269,24 +269,25 @@ export class AppState {
 
 // Application initialization
 async function initializeApp() {
-  const appState = AppState.getInstance()
-
-  // Initialize IPC handlers before window creation
-  initializeIpcHandlers(appState)
-
   app.whenReady().then(() => {
     console.log("App is ready")
+
+    const appState = AppState.getInstance()
+
+    // Initialize IPC handlers after app is ready
+    initializeIpcHandlers(appState)
+
     appState.createWindow()
     appState.createTray()
     // Register global shortcuts using ShortcutsHelper
     appState.shortcutsHelper.registerGlobalShortcuts()
-  })
 
-  app.on("activate", () => {
-    console.log("App activated")
-    if (appState.getMainWindow() === null) {
-      appState.createWindow()
-    }
+    app.on("activate", () => {
+      console.log("App activated")
+      if (appState.getMainWindow() === null) {
+        appState.createWindow()
+      }
+    })
   })
 
   // Quit when all windows are closed, except on macOS

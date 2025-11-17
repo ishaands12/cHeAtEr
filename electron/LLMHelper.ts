@@ -1,4 +1,5 @@
-import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai"
+import { AzureOpenAI } from "openai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import fs from "fs"
 
 interface OllamaResponse {
@@ -7,39 +8,86 @@ interface OllamaResponse {
 }
 
 export class LLMHelper {
-  private model: GenerativeModel | null = null
-  private readonly systemPrompt = `You are Wingman AI, a helpful, proactive assistant for any kind of problem or situation (not just coding). For any user input, analyze the situation, provide a clear problem statement, relevant context, and suggest several possible responses or actions the user could take next. Always explain your reasoning. Present your suggestions as a list of options or next steps.`
+  private azureClient: AzureOpenAI | null = null
+  private geminiClient: GoogleGenerativeAI | null = null
+  private readonly systemPrompt = `You are Wingman AI, a helpful assistant for coding and technical questions. Your responses should be:
+- Direct and practical
+- Concise, without unnecessary elaboration
+- Code-focused when relevant
+- Straight to the point
+
+For code questions: Provide clean, working code with brief explanations.
+Never ask users to upload images or provide canned responses about images.
+Always respond to the user's actual question directly.`
   private useOllama: boolean = false
+  private useGemini: boolean = false
   private ollamaModel: string = "llama3.2"
   private ollamaUrl: string = "http://localhost:11434"
+  private azureModelName: string = "gpt-5-mini"
+  private currentProvider: "azure" | "gemini" | "ollama" = "azure"
 
-  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string) {
+  constructor(useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string) {
     this.useOllama = useOllama
-    
+
     if (useOllama) {
       this.ollamaUrl = ollamaUrl || "http://localhost:11434"
       this.ollamaModel = ollamaModel || "gemma:latest" // Default fallback
       console.log(`[LLMHelper] Using Ollama with model: ${this.ollamaModel}`)
-      
+      this.currentProvider = "ollama"
+
       // Auto-detect and use first available model if specified model doesn't exist
       this.initializeOllamaModel()
-    } else if (apiKey) {
-      const genAI = new GoogleGenerativeAI(apiKey)
-      this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-      console.log("[LLMHelper] Using Google Gemini")
     } else {
-      throw new Error("Either provide Gemini API key or enable Ollama mode")
+      console.log("[LLMHelper] Initialized without provider. Please configure Gemini or Azure in Settings.")
     }
   }
 
-  private async fileToGenerativePart(imagePath: string) {
-    const imageData = await fs.promises.readFile(imagePath)
-    return {
-      inlineData: {
-        data: imageData.toString("base64"),
-        mimeType: "image/png"
+  public async configureProvider(settings: {
+    provider: "azure" | "gemini"
+    geminiApiKey?: string
+    azureApiKey?: string
+    azureEndpoint?: string
+    azureDeployment?: string
+  }): Promise<boolean> {
+    try {
+      if (settings.provider === "gemini") {
+        if (!settings.geminiApiKey || !settings.geminiApiKey.trim()) {
+          throw new Error("Gemini API key is required")
+        }
+        this.geminiClient = new GoogleGenerativeAI(settings.geminiApiKey)
+        this.useGemini = true
+        this.useOllama = false
+        this.currentProvider = "gemini"
+        console.log("[LLMHelper] Configured Gemini API")
+        return true
+      } else if (settings.provider === "azure") {
+        if (!settings.azureApiKey || !settings.azureApiKey.trim() ||
+            !settings.azureEndpoint || !settings.azureEndpoint.trim() ||
+            !settings.azureDeployment || !settings.azureDeployment.trim()) {
+          throw new Error("Missing Azure configuration")
+        }
+        this.azureClient = new AzureOpenAI({
+          apiKey: settings.azureApiKey,
+          endpoint: settings.azureEndpoint,
+          apiVersion: "2024-08-01-preview"
+        })
+        this.azureModelName = settings.azureDeployment
+        this.useGemini = false
+        this.useOllama = false
+        this.currentProvider = "azure"
+        console.log(`[LLMHelper] Configured Azure OpenAI with deployment: ${settings.azureDeployment}`)
+        return true
       }
+      throw new Error("Invalid provider specified")
+    } catch (error) {
+      console.error("[LLMHelper] Failed to configure provider:", error)
+      return false
     }
+  }
+
+  private async fileToBase64(imagePath: string): Promise<string> {
+    const imageData = await fs.promises.readFile(imagePath)
+    return imageData.toString("base64")
   }
 
   private cleanJsonResponse(text: string): string {
@@ -123,8 +171,15 @@ export class LLMHelper {
 
   public async extractProblemFromImages(imagePaths: string[]) {
     try {
-      const imageParts = await Promise.all(imagePaths.map(path => this.fileToGenerativePart(path)))
-      
+      const imageContents = await Promise.all(
+        imagePaths.map(async (path) => ({
+          type: "image_url" as const,
+          image_url: {
+            url: `data:image/png;base64,${await this.fileToBase64(path)}`
+          }
+        }))
+      )
+
       const prompt = `${this.systemPrompt}\n\nYou are a wingman. Please analyze these images and extract the following information in JSON format:\n{
   "problem_statement": "A clear statement of the problem or situation depicted in the images.",
   "context": "Relevant background or context from the images.",
@@ -132,9 +187,21 @@ export class LLMHelper {
   "reasoning": "Explanation of why these suggestions are appropriate."
 }\nImportant: Return ONLY the JSON object, without any markdown formatting or code blocks.`
 
-      const result = await this.model.generateContent([prompt, ...imageParts])
-      const response = await result.response
-      const text = this.cleanJsonResponse(response.text())
+      const response = await this.azureClient!.chat.completions.create({
+        model: this.azureModelName,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              ...imageContents
+            ]
+          }
+        ],
+        max_completion_tokens: 2000
+      })
+
+      const text = this.cleanJsonResponse(response.choices[0].message.content || "")
       return JSON.parse(text)
     } catch (error) {
       console.error("Error extracting problem from images:", error)
@@ -153,12 +220,17 @@ export class LLMHelper {
   }
 }\nImportant: Return ONLY the JSON object, without any markdown formatting or code blocks.`
 
-    console.log("[LLMHelper] Calling Gemini LLM for solution...");
+    console.log("[LLMHelper] Calling Azure OpenAI for solution...");
     try {
-      const result = await this.model.generateContent(prompt)
-      console.log("[LLMHelper] Gemini LLM returned result.");
-      const response = await result.response
-      const text = this.cleanJsonResponse(response.text())
+      const response = await this.azureClient!.chat.completions.create({
+        model: this.azureModelName,
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        max_completion_tokens: 2000
+      })
+      console.log("[LLMHelper] Azure OpenAI returned result.");
+      const text = this.cleanJsonResponse(response.choices[0].message.content || "")
       const parsed = JSON.parse(text)
       console.log("[LLMHelper] Parsed LLM response:", parsed)
       return parsed
@@ -170,8 +242,15 @@ export class LLMHelper {
 
   public async debugSolutionWithImages(problemInfo: any, currentCode: string, debugImagePaths: string[]) {
     try {
-      const imageParts = await Promise.all(debugImagePaths.map(path => this.fileToGenerativePart(path)))
-      
+      const imageContents = await Promise.all(
+        debugImagePaths.map(async (path) => ({
+          type: "image_url" as const,
+          image_url: {
+            url: `data:image/png;base64,${await this.fileToBase64(path)}`
+          }
+        }))
+      )
+
       const prompt = `${this.systemPrompt}\n\nYou are a wingman. Given:\n1. The original problem or situation: ${JSON.stringify(problemInfo, null, 2)}\n2. The current response or approach: ${currentCode}\n3. The debug information in the provided images\n\nPlease analyze the debug information and provide feedback in this JSON format:\n{
   "solution": {
     "code": "The code or main answer here.",
@@ -182,9 +261,21 @@ export class LLMHelper {
   }
 }\nImportant: Return ONLY the JSON object, without any markdown formatting or code blocks.`
 
-      const result = await this.model.generateContent([prompt, ...imageParts])
-      const response = await result.response
-      const text = this.cleanJsonResponse(response.text())
+      const response = await this.azureClient!.chat.completions.create({
+        model: this.azureModelName,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              ...imageContents
+            ]
+          }
+        ],
+        max_completion_tokens: 2000
+      })
+
+      const text = this.cleanJsonResponse(response.choices[0].message.content || "")
       const parsed = JSON.parse(text)
       console.log("[LLMHelper] Parsed debug LLM response:", parsed)
       return parsed
@@ -194,58 +285,54 @@ export class LLMHelper {
     }
   }
 
-  public async analyzeAudioFile(audioPath: string) {
-    try {
-      const audioData = await fs.promises.readFile(audioPath);
-      const audioPart = {
-        inlineData: {
-          data: audioData.toString("base64"),
-          mimeType: "audio/mp3"
-        }
-      };
-      const prompt = `${this.systemPrompt}\n\nDescribe this audio clip in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the audio. Do not return a structured JSON object, just answer naturally as you would to a user.`;
-      const result = await this.model.generateContent([prompt, audioPart]);
-      const response = await result.response;
-      const text = response.text();
-      return { text, timestamp: Date.now() };
-    } catch (error) {
-      console.error("Error analyzing audio file:", error);
-      throw error;
-    }
+  public async analyzeAudioFile(audioPath: string): Promise<{ text: string; timestamp: number }> {
+    // Note: Azure OpenAI doesn't support audio input directly
+    // This would need to be implemented with a speech-to-text service first
+    return {
+      text: "Audio analysis is not currently supported with Azure OpenAI. Please use text-based input or switch to a provider that supports audio.",
+      timestamp: Date.now()
+    };
   }
 
-  public async analyzeAudioFromBase64(data: string, mimeType: string) {
-    try {
-      const audioPart = {
-        inlineData: {
-          data,
-          mimeType
-        }
-      };
-      const prompt = `${this.systemPrompt}\n\nDescribe this audio clip in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the audio. Do not return a structured JSON object, just answer naturally as you would to a user and be concise.`;
-      const result = await this.model.generateContent([prompt, audioPart]);
-      const response = await result.response;
-      const text = response.text();
-      return { text, timestamp: Date.now() };
-    } catch (error) {
-      console.error("Error analyzing audio from base64:", error);
-      throw error;
-    }
+  public async analyzeAudioFromBase64(data: string, mimeType: string): Promise<{ text: string; timestamp: number }> {
+    // Note: Azure OpenAI doesn't support audio input directly
+    // This would need to be implemented with a speech-to-text service first
+    return {
+      text: "Audio analysis is not currently supported with Azure OpenAI. Please use text-based input or switch to a provider that supports audio.",
+      timestamp: Date.now()
+    };
   }
 
   public async analyzeImageFile(imagePath: string) {
     try {
-      const imageData = await fs.promises.readFile(imagePath);
-      const imagePart = {
-        inlineData: {
-          data: imageData.toString("base64"),
-          mimeType: "image/png"
-        }
-      };
-      const prompt = `${this.systemPrompt}\n\nDescribe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user. Be concise and brief.`;
-      const result = await this.model.generateContent([prompt, imagePart]);
-      const response = await result.response;
-      const text = response.text();
+      const base64Image = await this.fileToBase64(imagePath);
+      const prompt = `${this.systemPrompt}\n\nAnalyze this screenshot and look for any visible questions, problems, or coding challenges. If you find any questions:
+1. Provide a clear, concise answer to the question
+2. If it's a coding problem, provide working code with explanations
+3. Include examples or step-by-step solutions when relevant
+
+If no clear question is visible, briefly describe what you see and suggest how you can help. Be direct and practical in your response.`;
+
+      const response = await this.azureClient!.chat.completions.create({
+        model: this.azureModelName,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${base64Image}`
+                }
+              }
+            ]
+          }
+        ],
+        max_completion_tokens: 1500
+      })
+
+      const text = response.choices[0].message.content || "";
       return { text, timestamp: Date.now() };
     } catch (error) {
       console.error("Error analyzing image file:", error);
@@ -253,14 +340,118 @@ export class LLMHelper {
     }
   }
 
-  public async chatWithGemini(message: string): Promise<string> {
+  public async chatWithGemini(message: string, history?: Array<{role: string; text: string}>, screenshotPath?: string): Promise<string> {
     try {
-      if (this.useOllama) {
-        return this.callOllama(message);
-      } else if (this.model) {
-        const result = await this.model.generateContent(message);
+      if (this.useGemini) {
+        if (!this.geminiClient) {
+          throw new Error("Gemini API is not configured. Please configure your API key in Settings.");
+        }
+
+        // Try different Gemini models - prefer lightweight models first
+        const modelCandidates = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
+        let model = null;
+        let lastError = null;
+
+        for (const modelName of modelCandidates) {
+          try {
+            model = this.geminiClient.getGenerativeModel({ model: modelName });
+            console.log(`[LLMHelper] Using Gemini model: ${modelName}`);
+            break;
+          } catch (error) {
+            lastError = error;
+            console.warn(`[LLMHelper] Model ${modelName} not available, trying next...`);
+          }
+        }
+
+        if (!model) {
+          throw lastError || new Error("No compatible Gemini model found");
+        }
+
+        // Build conversation history
+        const chatHistory = history?.map(msg => ({
+          role: msg.role === "gemini" ? "model" : "user",
+          parts: [{ text: msg.text }]
+        })) || [];
+
+        // Create chat session
+        const chat = model.startChat({
+          history: chatHistory,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2048
+          }
+        });
+
+        // Prepare message parts
+        let messageParts: any[] = [{ text: message }];
+
+        // Add screenshot if provided
+        if (screenshotPath) {
+          try {
+            const imageData = await this.fileToBase64(screenshotPath);
+            console.log("[LLMHelper] Adding screenshot to Gemini request");
+            messageParts.unshift({
+              inlineData: {
+                mimeType: "image/png",
+                data: imageData
+              }
+            });
+          } catch (error) {
+            console.error("[LLMHelper] Error processing screenshot for Gemini:", error);
+            // Continue without image
+          }
+        }
+
+        // Send message with optional image
+        console.log("[LLMHelper] Sending request to Gemini...");
+        const result = await chat.sendMessage(messageParts);
         const response = await result.response;
-        return response.text();
+        console.log("[LLMHelper] Gemini response received successfully");
+        return response.text() || "No response";
+      } else if (this.useOllama) {
+        // Ollama doesn't support images, just use the text
+        return this.callOllama(message);
+      } else if (this.azureClient) {
+        // Build conversation history
+        const messages: Array<any> = [
+          { role: "system", content: this.systemPrompt }
+        ];
+
+        // Add conversation history if provided
+        if (history && history.length > 0) {
+          history.forEach(msg => {
+            messages.push({
+              role: msg.role === "gemini" ? "assistant" : "user",
+              content: msg.text
+            });
+          });
+        }
+
+        // Add current message (vision not supported by gpt-5-mini)
+        if (screenshotPath) {
+          console.log(`[LLMHelper] Screenshot path received: ${screenshotPath}`);
+          console.log("[LLMHelper] Note: gpt-5-mini doesn't support vision. Please describe the screenshot in your message.");
+          messages.push({ role: "user", content: message || "I've taken a screenshot. Please help me." });
+        } else {
+          messages.push({ role: "user", content: message });
+        }
+
+        console.log("[LLMHelper] Sending request to Azure OpenAI...");
+        console.log("[LLMHelper] Model:", this.azureModelName);
+        console.log("[LLMHelper] Message count:", messages.length);
+        console.log("[LLMHelper] Last message has image:",
+          Array.isArray(messages[messages.length - 1]?.content) &&
+          messages[messages.length - 1]?.content.some((c: any) => c.type === "image_url")
+        );
+
+        const response = await this.azureClient.chat.completions.create({
+          model: this.azureModelName,
+          messages: messages,
+          max_completion_tokens: 2000
+        })
+
+        console.log("[LLMHelper] Response received successfully");
+        return response.choices[0].message.content || "";
       } else {
         throw new Error("No LLM provider configured");
       }
@@ -298,7 +489,7 @@ export class LLMHelper {
   }
 
   public getCurrentModel(): string {
-    return this.useOllama ? this.ollamaModel : "gemini-2.0-flash";
+    return this.useOllama ? this.ollamaModel : this.azureModelName;
   }
 
   public async switchToOllama(model?: string, url?: string): Promise<void> {
@@ -317,16 +508,13 @@ export class LLMHelper {
 
   public async switchToGemini(apiKey?: string): Promise<void> {
     if (apiKey) {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      this.geminiClient = new GoogleGenerativeAI(apiKey)
+      this.useGemini = true
+      this.useOllama = false
+      console.log("[LLMHelper] Switched to Gemini");
+    } else {
+      throw new Error("Gemini API key is required");
     }
-    
-    if (!this.model && !apiKey) {
-      throw new Error("No Gemini API key provided and no existing model instance");
-    }
-    
-    this.useOllama = false;
-    console.log("[LLMHelper] Switched to Gemini");
   }
 
   public async testConnection(): Promise<{ success: boolean; error?: string }> {
@@ -340,17 +528,20 @@ export class LLMHelper {
         await this.callOllama("Hello");
         return { success: true };
       } else {
-        if (!this.model) {
-          return { success: false, error: "No Gemini model configured" };
+        if (!this.azureClient) {
+          return { success: false, error: "No Azure OpenAI client configured" };
         }
         // Test with a simple prompt
-        const result = await this.model.generateContent("Hello");
-        const response = await result.response;
-        const text = response.text(); // Ensure the response is valid
+        const response = await this.azureClient.chat.completions.create({
+          model: this.azureModelName,
+          messages: [{ role: "user", content: "Hello" }],
+          max_completion_tokens: 10
+        })
+        const text = response.choices[0].message.content; // Ensure the response is valid
         if (text) {
           return { success: true };
         } else {
-          return { success: false, error: "Empty response from Gemini" };
+          return { success: false, error: "Empty response from Azure OpenAI" };
         }
       }
     } catch (error) {

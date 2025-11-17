@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useQuery } from "react-query"
-import ScreenshotQueue from "../components/Queue/ScreenshotQueue"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/atom-one-dark.css'
 import {
   Toast,
   ToastTitle,
@@ -8,14 +11,19 @@ import {
   ToastVariant,
   ToastMessage
 } from "../components/ui/toast"
-import QueueCommands from "../components/Queue/QueueCommands"
-import ModelSelector from "../components/ui/ModelSelector"
 
 interface QueueProps {
-  setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
+  setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug" | "settings">>
+}
+
+interface UISettings {
+  windowPosition?: { x: number; y: number }
+  windowSize?: { width: number; height: number }
+  theme?: "dark" | "light"
 }
 
 const Queue: React.FC<QueueProps> = ({ setView }) => {
+  // ============ STATE MANAGEMENT ============
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<ToastMessage>({
     title: "",
@@ -23,307 +31,374 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     variant: "neutral"
   })
 
-  const [isTooltipVisible, setIsTooltipVisible] = useState(false)
-  const [tooltipHeight, setTooltipHeight] = useState(0)
-  const contentRef = useRef<HTMLDivElement>(null)
-
   const [chatInput, setChatInput] = useState("")
-  const [chatMessages, setChatMessages] = useState<{role: "user"|"gemini", text: string}[]>([])
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "gemini"; text: string }>>([])
   const [chatLoading, setChatLoading] = useState(false)
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const chatInputRef = useRef<HTMLInputElement>(null)
-  
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [currentModel, setCurrentModel] = useState<{ provider: string; model: string }>({ provider: "gemini", model: "gemini-2.0-flash" })
+  const [attachedScreenshot, setAttachedScreenshot] = useState<{ path: string; preview: string } | null>(null)
 
-  const barRef = useRef<HTMLDivElement>(null)
+  // ============ REFS ============
+  const responseAreaRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
+  // ============ API & DATA FETCHING ============
   const { data: screenshots = [], refetch } = useQuery<Array<{ path: string; preview: string }>, Error>(
     ["screenshots"],
     async () => {
       try {
-        const existing = await window.electronAPI.getScreenshots()
+        const existing = await window.electronAPI?.getScreenshots?.() || []
         return existing
       } catch (error) {
         console.error("Error loading screenshots:", error)
-        showToast("Error", "Failed to load existing screenshots", "error")
+        showToast("Error", "Failed to load screenshots", "error")
         return []
       }
     },
-    {
-      staleTime: Infinity,
-      cacheTime: Infinity,
-      refetchOnWindowFocus: true,
-      refetchOnMount: true
-    }
+    { staleTime: Infinity, cacheTime: Infinity, refetchOnWindowFocus: true, refetchOnMount: true }
   )
 
-  const showToast = (
-    title: string,
-    description: string,
-    variant: ToastVariant
-  ) => {
+  // ============ UTILITIES ============
+  const showToast = useCallback((title: string, description: string, variant: ToastVariant) => {
     setToastMessage({ title, description, variant })
     setToastOpen(true)
-  }
+  }, [])
 
-  const handleDeleteScreenshot = async (index: number) => {
-    const screenshotToDelete = screenshots[index]
-
-    try {
-      const response = await window.electronAPI.deleteScreenshot(
-        screenshotToDelete.path
-      )
-
-      if (response.success) {
-        refetch()
-      } else {
-        console.error("Failed to delete screenshot:", response.error)
-        showToast("Error", "Failed to delete the screenshot file", "error")
-      }
-    } catch (error) {
-      console.error("Error deleting screenshot:", error)
-    }
-  }
-
-  const handleChatSend = async () => {
-    if (!chatInput.trim()) return
-    setChatMessages((msgs) => [...msgs, { role: "user", text: chatInput }])
-    setChatLoading(true)
-    setChatInput("")
-    try {
-      const response = await window.electronAPI.invoke("gemini-chat", chatInput)
-      setChatMessages((msgs) => [...msgs, { role: "gemini", text: response }])
-    } catch (err) {
-      setChatMessages((msgs) => [...msgs, { role: "gemini", text: "Error: " + String(err) }])
-    } finally {
-      setChatLoading(false)
-      chatInputRef.current?.focus()
-    }
-  }
-
-  // Load current model configuration on mount
-  useEffect(() => {
-    const loadCurrentModel = async () => {
-      try {
-        const config = await window.electronAPI.getCurrentLlmConfig();
-        setCurrentModel({ provider: config.provider, model: config.model });
-      } catch (error) {
-        console.error('Error loading current model config:', error);
-      }
-    };
-    loadCurrentModel();
-  }, []);
-
-  useEffect(() => {
-    const updateDimensions = () => {
-      if (contentRef.current) {
-        let contentHeight = contentRef.current.scrollHeight
-        const contentWidth = contentRef.current.scrollWidth
-        if (isTooltipVisible) {
-          contentHeight += tooltipHeight
+  const scrollToBottom = useCallback(() => {
+    if (responseAreaRef.current) {
+      setTimeout(() => {
+        const element = responseAreaRef.current
+        if (element) {
+          // Use scrollIntoView as a fallback
+          const lastChild = element.lastElementChild
+          if (lastChild) {
+            lastChild.scrollIntoView({ behavior: 'smooth', block: 'end' })
+          } else {
+            // Fallback to scrollTo
+            element.scrollTop = element.scrollHeight
+          }
         }
-        window.electronAPI.updateContentDimensions({
-          width: contentWidth,
-          height: contentHeight
-        })
+      }, 100)
+    }
+  }, [])
+
+  const copyToClipboard = useCallback((text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("Copied", "Message copied to clipboard", "neutral")
+    }).catch(() => {
+      showToast("Error", "Failed to copy to clipboard", "error")
+    })
+  }, [showToast])
+
+  // ============ LOCALSTORAGE PERSISTENCE ============
+  useEffect(() => {
+    const saved = localStorage.getItem("cluely-ui-settings")
+    if (saved) {
+      try {
+        JSON.parse(saved) // Validate JSON
+      } catch (e) {
+        console.error("Failed to parse UI settings:", e)
       }
     }
+  }, [])
 
-    const resizeObserver = new ResizeObserver(updateDimensions)
-    if (contentRef.current) {
-      resizeObserver.observe(contentRef.current)
-    }
-    updateDimensions()
-
-    const cleanupFunctions = [
-      window.electronAPI.onScreenshotTaken(() => refetch()),
-      window.electronAPI.onResetView(() => refetch()),
-      window.electronAPI.onSolutionError((error: string) => {
-        showToast(
-          "Processing Failed",
-          "There was an error processing your screenshots.",
-          "error"
-        )
-        setView("queue")
-        console.error("Processing error:", error)
-      }),
-      window.electronAPI.onProcessingNoScreenshots(() => {
-        showToast(
-          "No Screenshots",
-          "There are no screenshots to process.",
-          "neutral"
-        )
-      })
+  // ============ UTILITY FUNCTIONS ============
+  const detectAndFormatCodeQuestion = (text: string): string => {
+    // Check if the message looks like it contains code or is asking about code
+    const codeKeywords = [
+      'how to', 'write', 'function', 'class', 'def ', 'const ', 'let ', 'var ',
+      'import', 'export', 'return', 'if ', 'for ', 'while', 'code', 'program',
+      'script', 'error', 'bug', 'debug', 'fix', 'implement', 'create'
     ]
 
-    return () => {
-      resizeObserver.disconnect()
-      cleanupFunctions.forEach((cleanup) => cleanup())
-    }
-  }, [isTooltipVisible, tooltipHeight])
+    const hasCodeKeyword = codeKeywords.some(keyword => text.toLowerCase().includes(keyword))
 
-  // Seamless screenshot-to-LLM flow
-  useEffect(() => {
-    // Listen for screenshot taken event
-    const unsubscribe = window.electronAPI.onScreenshotTaken(async (data) => {
-      // Refetch screenshots to update the queue
-      await refetch();
-      // Show loading in chat
-      setChatLoading(true);
-      try {
-        // Get the latest screenshot path
-        const latest = data?.path || (Array.isArray(data) && data.length > 0 && data[data.length - 1]?.path);
-        if (latest) {
-          // Call the LLM to process the screenshot
-          const response = await window.electronAPI.invoke("analyze-image-file", latest);
-          setChatMessages((msgs) => [...msgs, { role: "gemini", text: response.text }]);
-        }
-      } catch (err) {
-        setChatMessages((msgs) => [...msgs, { role: "gemini", text: "Error: " + String(err) }]);
-      } finally {
-        setChatLoading(false);
+    if (hasCodeKeyword && !text.includes('```')) {
+      // Try to detect if there's actual code in the text
+      const codePattern = /([a-zA-Z_]\w*\s*[=(]\s*|\w+\s*\(\s*|function\s+\w+)/
+      if (codePattern.test(text)) {
+        // Extract potential code parts and wrap them
+        return text.replace(
+          /([a-zA-Z_]\w*(?:\s*[=;]|\s*\(|.*?\))|function\s+\w+.*?{[\s\S]*?})/g,
+          '```\n$1\n```'
+        )
       }
-    });
-    return () => {
-      unsubscribe && unsubscribe();
-    };
-  }, [refetch]);
+    }
 
-  const handleTooltipVisibilityChange = (visible: boolean, height: number) => {
-    setIsTooltipVisible(visible)
-    setTooltipHeight(height)
+    return text
   }
 
-  const handleChatToggle = () => {
-    setIsChatOpen(!isChatOpen)
-  }
+  // ============ CHAT OPERATIONS ============
+  const handleChatSend = useCallback(async () => {
+    if (!chatInput.trim() && !attachedScreenshot) return
 
-  const handleSettingsToggle = () => {
-    setIsSettingsOpen(!isSettingsOpen)
-  }
+    let userMessage = chatInput
 
-  const handleModelChange = (provider: "ollama" | "gemini", model: string) => {
-    setCurrentModel({ provider, model })
-    // Update chat messages to reflect the model change
-    const modelName = provider === "ollama" ? model : "Gemini 2.0 Flash"
-    setChatMessages((msgs) => [...msgs, { 
-      role: "gemini", 
-      text: `🔄 Switched to ${provider === "ollama" ? "🏠" : "☁️"} ${modelName}. Ready for your questions!` 
-    }])
-  }
+    // Format coding questions
+    userMessage = detectAndFormatCodeQuestion(userMessage)
 
+    // Add screenshot context if attached
+    if (attachedScreenshot) {
+      userMessage = `[Screenshot attached]\n${userMessage || "Can you analyze this screenshot?"}`
+    }
 
+    setChatMessages((prev) => [...prev, { role: "user", text: userMessage }])
+    setChatLoading(true)
+    setChatInput("")
+
+    try {
+      // Prepare the payload with screenshot if available
+      const payload: any = {
+        message: userMessage,
+        history: chatMessages
+      }
+
+      // If screenshot is attached, send it to the AI
+      if (attachedScreenshot) {
+        payload.screenshotPath = attachedScreenshot.path
+      }
+
+      const response = await window.electronAPI?.invoke?.(
+        "gemini-chat",
+        payload
+      ) || "Error: Could not reach AI service"
+
+      setChatMessages((prev) => [...prev, { role: "gemini", text: response }])
+
+      // Clear the attached screenshot after sending
+      setAttachedScreenshot(null)
+    } catch (err) {
+      setChatMessages((prev) => [...prev, { role: "gemini", text: `Error: ${String(err)}` }])
+      showToast("Error", "Failed to get response", "error")
+    } finally {
+      setChatLoading(false)
+      inputRef.current?.focus()
+    }
+  }, [chatInput, attachedScreenshot, chatMessages, showToast])
+
+  // ============ KEYBOARD SHORTCUTS ============
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+      const modifier = isMac ? e.metaKey : e.ctrlKey
+
+      // Cmd/Ctrl+B: Toggle window visibility
+      if (modifier && e.key === "b") {
+        e.preventDefault()
+        window.electronAPI?.invoke?.("toggle-window")
+        return
+      }
+
+      // Cmd/Ctrl+H: Take screenshot
+      if (modifier && e.key === "h") {
+        e.preventDefault()
+        window.electronAPI?.takeScreenshot?.()
+        return
+      }
+
+      // Arrow keys: Move window (with Shift for larger steps)
+      if (modifier && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault()
+        const step = e.shiftKey ? 10 : 1
+        switch (e.key) {
+          case "ArrowUp":
+            window.electronAPI?.invoke?.("move-window", "up", step)
+            break
+          case "ArrowDown":
+            window.electronAPI?.invoke?.("move-window", "down", step)
+            break
+          case "ArrowLeft":
+            window.electronAPI?.invoke?.("move-window", "left", step)
+            break
+          case "ArrowRight":
+            window.electronAPI?.invoke?.("move-window", "right", step)
+            break
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleChatSend])
+
+  // ============ AUTO-SCROLL ON NEW MESSAGES ============
+  useEffect(() => {
+    scrollToBottom()
+  }, [chatMessages, chatLoading, scrollToBottom])
+
+  // ============ ELECTRON IPC LISTENERS ============
+  useEffect(() => {
+    const cleanup = [
+      window.electronAPI?.onScreenshotTaken?.((data) => {
+        console.log("[Queue] Screenshot taken event received:", data)
+        setAttachedScreenshot(data)
+        refetch()
+        showToast("Screenshot Captured", "Screenshot attached to your next message", "neutral")
+      }),
+      window.electronAPI?.onResetView?.(() => {
+        console.log("[Queue] Reset view event received")
+        refetch()
+      }),
+      window.electronAPI?.onSolutionError?.((error: string) => {
+        console.error("[Queue] Solution error event:", error)
+        showToast("Processing Failed", "Error processing screenshots", "error")
+        console.error("Processing error:", error)
+      })
+    ].filter(Boolean)
+
+    return () => cleanup.forEach((fn) => fn?.())
+  }, [refetch, showToast])
+
+  // ============ RENDER - MAIN LAYOUT ============
   return (
-    <div
-      ref={barRef}
-      style={{
-        position: "relative",
-        width: "100%",
-        pointerEvents: "auto"
-      }}
-      className="select-none"
-    >
-      <div className="bg-transparent w-full">
-        <div className="px-2 py-1">
-          <Toast
-            open={toastOpen}
-            onOpenChange={setToastOpen}
-            variant={toastMessage.variant}
-            duration={3000}
+    <div className="app-container">
+      {/* Toast Notifications */}
+      <Toast open={toastOpen} onOpenChange={setToastOpen} variant={toastMessage.variant} duration={3000}>
+        <ToastTitle>{toastMessage.title}</ToastTitle>
+        <ToastDescription>{toastMessage.description}</ToastDescription>
+      </Toast>
+
+      {/* ============ TOP BAR ============ */}
+      <div className="top-bar">
+        <div className="top-bar-left">
+          <div className="app-logo">cHeAtEr</div>
+        </div>
+        <div className="top-bar-right">
+          <button
+            className="icon-button"
+            title="Settings"
+            onClick={() => setView("settings")}
+            onMouseDown={(e) => e.preventDefault()}
           >
-            <ToastTitle>{toastMessage.title}</ToastTitle>
-            <ToastDescription>{toastMessage.description}</ToastDescription>
-          </Toast>
-          <div className="w-fit">
-            <QueueCommands
-              screenshots={screenshots}
-              onTooltipVisibilityChange={handleTooltipVisibilityChange}
-              onChatToggle={handleChatToggle}
-              onSettingsToggle={handleSettingsToggle}
-            />
-          </div>
-          {/* Conditional Settings Interface */}
-          {isSettingsOpen && (
-            <div className="mt-4 w-full mx-auto">
-              <ModelSelector onModelChange={handleModelChange} onChatOpen={() => setIsChatOpen(true)} />
-            </div>
-          )}
-          
-          {/* Conditional Chat Interface */}
-          {isChatOpen && (
-            <div className="mt-4 w-full mx-auto liquid-glass chat-container p-4 flex flex-col">
-            <div className="flex-1 overflow-y-auto mb-3 p-3 rounded-lg bg-white/10 backdrop-blur-md max-h-64 min-h-[120px] glass-content border border-white/20 shadow-lg">
-              {chatMessages.length === 0 ? (
-                <div className="text-sm text-gray-600 text-center mt-8">
-                  💬 Chat with {currentModel.provider === "ollama" ? "🏠" : "☁️"} {currentModel.model}
-                  <br />
-                  <span className="text-xs text-gray-500">Take a screenshot (Cmd+H) for automatic analysis</span>
-                  <br />
-                  <span className="text-xs text-gray-500">Click ⚙️ Models to switch AI providers</span>
-                </div>
-              ) : (
-                chatMessages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`w-full flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-3`}
-                  >
-                    <div
-                      className={`max-w-[80%] px-3 py-1.5 rounded-xl text-xs shadow-md backdrop-blur-sm border ${
-                        msg.role === "user" 
-                          ? "bg-gray-700/80 text-gray-100 ml-12 border-gray-600/40" 
-                          : "bg-white/85 text-gray-700 mr-12 border-gray-200/50"
-                      }`}
-                      style={{ wordBreak: "break-word", lineHeight: "1.4" }}
-                    >
-                      {msg.text}
+            ⚙️
+          </button>
+          <button
+            className="icon-button close"
+            title="Hide window (⌘B)"
+            onClick={() => window.electronAPI?.invoke?.("toggle-window")}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* ============ MAIN CONTENT ============ */}
+      <div className="main-content">
+        {/* Response Area */}
+        <div className="response-area" ref={responseAreaRef}>
+          {chatMessages.length > 0 && (
+            chatMessages.map((msg, idx) => (
+              <div key={idx} className={`response-card ${msg.role}`}>
+                {msg.role === "gemini" && (
+                  <div className="response-card-header">
+                    <span className="response-card-role">AI</span>
+                    <div className="response-card-actions">
+                      <button
+                        className="copy-button"
+                        onClick={() => copyToClipboard(msg.text)}
+                        title="Copy response"
+                      >
+                        Copy
+                      </button>
                     </div>
                   </div>
-                ))
-              )}
-              {chatLoading && (
-                <div className="flex justify-start mb-3">
-                  <div className="bg-white/85 text-gray-600 px-3 py-1.5 rounded-xl text-xs backdrop-blur-sm border border-gray-200/50 shadow-md mr-12">
-                    <span className="inline-flex items-center">
-                      <span className="animate-pulse text-gray-400">●</span>
-                      <span className="animate-pulse animation-delay-200 text-gray-400">●</span>
-                      <span className="animate-pulse animation-delay-400 text-gray-400">●</span>
-                      <span className="ml-2">{currentModel.model} is replying...</span>
-                    </span>
-                  </div>
+                )}
+                <div className="response-content">
+                  {msg.role === "gemini" ? (
+                    <div className="markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                        {msg.text}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.text
+                  )}
                 </div>
-              )}
+              </div>
+            ))
+          )}
+
+          {/* Loading State */}
+          {chatLoading && (
+            <div className="response-card ai">
+              <div className="response-card-header">
+                <span className="response-card-role">AI</span>
+              </div>
+              <div className="loading-indicator">
+                <span className="loading-dot"></span>
+                <span className="loading-dot"></span>
+                <span className="loading-dot"></span>
+              </div>
             </div>
-            <form
-              className="flex gap-2 items-center glass-content"
-              onSubmit={e => {
-                e.preventDefault();
-                handleChatSend();
-              }}
-            >
-              <input
-                ref={chatInputRef}
-                className="flex-1 rounded-lg px-3 py-2 bg-white/25 backdrop-blur-md text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-1 focus:ring-gray-400/60 border border-white/40 shadow-lg transition-all duration-200"
-                placeholder="Type your message..."
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                disabled={chatLoading}
-              />
-              <button
-                type="submit"
-                className="p-2 rounded-lg bg-gray-600/80 hover:bg-gray-700/80 border border-gray-500/60 flex items-center justify-center transition-all duration-200 backdrop-blur-sm shadow-lg disabled:opacity-50"
-                disabled={chatLoading || !chatInput.trim()}
-                tabIndex={-1}
-                aria-label="Send"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-7.5-15-7.5v6l10 1.5-10 1.5v6z" />
-                </svg>
-              </button>
-            </form>
-          </div>
           )}
         </div>
+      </div>
+
+      {/* ============ INPUT SECTION (Bottom) ============ */}
+      <div className="input-section">
+        {attachedScreenshot && (
+          <div style={{
+            padding: '8px 10px',
+            background: 'rgba(96, 165, 250, 0.1)',
+            border: '1px solid rgba(96, 165, 250, 0.3)',
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: 'rgba(96, 165, 250, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <span>📸 Screenshot attached</span>
+            <button
+              onClick={() => setAttachedScreenshot(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'rgba(96, 165, 250, 0.9)',
+                cursor: 'pointer',
+                fontSize: '14px',
+                padding: '0 4px'
+              }}
+              title="Remove screenshot"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <div className="input-group">
+          <input
+            ref={inputRef}
+            className="message-input"
+            type="text"
+            placeholder="What should I say? (Press Enter to send)"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              // Send on Enter key
+              if (e.key === "Enter") {
+                e.preventDefault()
+                handleChatSend()
+              }
+            }}
+            disabled={chatLoading}
+            autoFocus
+          />
+          <button
+            className="action-button send-button"
+            onClick={handleChatSend}
+            disabled={chatLoading || (!chatInput.trim() && !attachedScreenshot)}
+            title="Send (⏎)"
+          >
+            Send
+          </button>
+          <button
+            className="action-button"
+            onClick={() => window.electronAPI?.takeScreenshot?.()}
+            title="Screenshot (⌘H)"
+          >
+            📸
+          </button>
+        </div>
+
       </div>
     </div>
   )

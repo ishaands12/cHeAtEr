@@ -1,7 +1,7 @@
 // ipcHandlers.ts
 
 import { ipcMain, app } from "electron"
-import { AppState } from "./main"
+import { AppState } from "./AppStateClass"
 
 export function initializeIpcHandlers(appState: AppState): void {
   ipcMain.handle(
@@ -103,9 +103,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   })
 
-  ipcMain.handle("gemini-chat", async (event, message: string) => {
+  ipcMain.handle("gemini-chat", async (event, data: { message: string; history: Array<{role: string; text: string}>; screenshotPath?: string }) => {
     try {
-      const result = await appState.processingHelper.getLLMHelper().chatWithGemini(message);
+      const result = await appState.processingHelper.getLLMHelper().chatWithGemini(data.message, data.history, data.screenshotPath);
       return result;
     } catch (error: any) {
       console.error("Error in gemini-chat handler:", error);
@@ -193,6 +193,28 @@ export function initializeIpcHandlers(appState: AppState): void {
       return result;
     } catch (error: any) {
       console.error("Error testing LLM connection:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("update-llm-settings", async (_, settings: {
+    provider: "azure" | "gemini"
+    geminiApiKey?: string
+    azureApiKey?: string
+    azureEndpoint?: string
+    azureDeployment?: string
+  }) => {
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const success = await llmHelper.configureProvider(settings);
+      if (success) {
+        console.log(`[ipcHandlers] LLM provider updated to: ${settings.provider}`);
+        return { success: true };
+      } else {
+        return { success: false, error: "Failed to configure provider" };
+      }
+    } catch (error: any) {
+      console.error("Error updating LLM settings:", error);
       return { success: false, error: error.message };
     }
   });

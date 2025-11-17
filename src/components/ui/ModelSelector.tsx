@@ -87,7 +87,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
       if (result.success) {
         await loadCurrentConfig();
         setConnectionStatus('success');
-        onModelChange?.(selectedProvider, selectedProvider === 'ollama' ? selectedOllamaModel : 'gemini-2.0-flash');
+        onModelChange?.(selectedProvider, selectedProvider === 'ollama' ? selectedOllamaModel : 'gpt-5-mini');
         // Auto-open chat window after successful model change
         setTimeout(() => {
           onChatOpen?.();
@@ -150,16 +150,22 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
         <div className="flex gap-2">
           <button
             onClick={() => setSelectedProvider('gemini')}
+            onMouseDown={(e) => e.preventDefault()}
+            type="button"
+            tabIndex={-1}
             className={`flex-1 px-3 py-2 rounded text-xs transition-all ${
               selectedProvider === 'gemini'
                 ? 'bg-blue-500 text-white shadow-md'
                 : 'bg-white/40 text-gray-700 hover:bg-white/60'
             }`}
           >
-            ☁️ Gemini (Cloud)
+            ☁️ Azure OpenAI
           </button>
           <button
             onClick={() => setSelectedProvider('ollama')}
+            onMouseDown={(e) => e.preventDefault()}
+            type="button"
+            tabIndex={-1}
             className={`flex-1 px-3 py-2 rounded text-xs transition-all ${
               selectedProvider === 'ollama'
                 ? 'bg-green-500 text-white shadow-md'
@@ -174,7 +180,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
       {/* Provider-specific settings */}
       {selectedProvider === 'gemini' ? (
         <div className="space-y-2">
-          <label className="text-xs font-medium text-gray-700">Gemini API Key (optional if already set)</label>
+          <label className="text-xs font-medium text-gray-700">Azure OpenAI API Key (optional if already set)</label>
           <input
             type="password"
             placeholder="Enter API key to update..."
@@ -200,6 +206,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
               <label className="text-xs font-medium text-gray-700">Model</label>
               <button
                 onClick={loadOllamaModels}
+                onMouseDown={(e) => e.preventDefault()}
+                type="button"
+                tabIndex={-1}
                 className="px-2 py-1 text-xs bg-white/60 hover:bg-white/80 rounded transition-all"
                 title="Refresh models"
               >
@@ -232,15 +241,21 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
       <div className="flex gap-2 pt-2">
         <button
           onClick={handleProviderSwitch}
+          onMouseDown={(e) => e.preventDefault()}
           disabled={connectionStatus === 'testing'}
+          type="button"
+          tabIndex={-1}
           className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white text-xs rounded transition-all shadow-md"
         >
           {connectionStatus === 'testing' ? 'Switching...' : 'Apply Changes'}
         </button>
-        
+
         <button
           onClick={testConnection}
+          onMouseDown={(e) => e.preventDefault()}
           disabled={connectionStatus === 'testing'}
+          type="button"
+          tabIndex={-1}
           className="px-3 py-2 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white text-xs rounded transition-all shadow-md"
         >
           Test
@@ -249,7 +264,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onModelChange, onChatOpen
 
       {/* Help text */}
       <div className="text-xs text-gray-600 space-y-1">
-        <div>💡 <strong>Gemini:</strong> Fast, cloud-based, requires API key</div>
+        <div>💡 <strong>Azure OpenAI:</strong> Fast, cloud-based, requires API key</div>
         <div>💡 <strong>Ollama:</strong> Private, local, requires Ollama installation</div>
       </div>
     </div>

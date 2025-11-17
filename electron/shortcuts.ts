@@ -1,5 +1,5 @@
 import { globalShortcut, app } from "electron"
-import { AppState } from "./main" // Adjust the import path if necessary
+import { AppState } from "./AppStateClass" // Adjust the import path if necessary
 
 export class ShortcutsHelper {
   private appState: AppState
@@ -18,17 +18,30 @@ export class ShortcutsHelper {
     globalShortcut.register("CommandOrControl+H", async () => {
       const mainWindow = this.appState.getMainWindow()
       if (mainWindow) {
-        console.log("Taking screenshot...")
+        console.log("[ShortcutsHelper] Taking screenshot with Cmd+H...")
         try {
+          console.log("[ShortcutsHelper] Calling takeScreenshot()...")
           const screenshotPath = await this.appState.takeScreenshot()
+          console.log(`[ShortcutsHelper] Screenshot saved to: ${screenshotPath}`)
+
+          console.log("[ShortcutsHelper] Getting image preview...")
           const preview = await this.appState.getImagePreview(screenshotPath)
+          console.log(`[ShortcutsHelper] Preview generated, sending to renderer...`)
+
           mainWindow.webContents.send("screenshot-taken", {
             path: screenshotPath,
             preview
           })
+          console.log("[ShortcutsHelper] Screenshot event sent successfully")
         } catch (error) {
-          console.error("Error capturing screenshot:", error)
+          console.error("[ShortcutsHelper] Error capturing screenshot:", error)
+          // Send error event to renderer
+          mainWindow.webContents.send("screenshot-error", {
+            error: error.message
+          })
         }
+      } else {
+        console.warn("[ShortcutsHelper] Main window not available for screenshot")
       }
     })
 

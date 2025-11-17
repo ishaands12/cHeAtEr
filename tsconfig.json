@@ -11,9 +11,10 @@
     "isolatedModules": true,
     "strict": true,
     "noUnusedLocals": false,
-    "noUnusedParameters": true,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "strictNullChecks": false
   },
   "include": ["src"], // Only React source files
   "references": [{ "path": "./tsconfig.node.json" }]

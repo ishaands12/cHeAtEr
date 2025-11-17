@@ -1,9 +1,36 @@
-# Cluely
+# cHeAtEr
 
-[Cluely](https://cluely.com) - The invisible desktop assistant that provides real-time insights, answers, and support during meetings, interviews, presentations, and professional conversations.
+**Your invisible AI wingman for meetings, interviews, coding sessions, and presentations.**
+
+An Electron-based desktop application that provides real-time AI assistance without being detected. Works seamlessly during video calls, online tests, technical interviews, and any scenario where you need instant AI help.
+
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+[![Platform: Cross-platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green.svg)](https://github.com/ishaands12/cHeAtEr)
+[![Electron](https://img.shields.io/badge/Electron-33.4-47848F.svg)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://reactjs.org/)
+
+---
+
+## 🎯 What is cHeAtEr?
+
+cHeAtEr is a privacy-focused AI assistant that runs as an invisible overlay on your desktop. It can:
+- 📸 **Analyze screenshots** of anything on your screen
+- 💬 **Chat with AI** about problems, questions, or code
+- 🔒 **Stay hidden** from screen recordings and shares (macOS)
+- 🏠 **Run locally** with Ollama (100% private) or use cloud AI (Gemini/Azure)
+- ⚡ **Respond instantly** via global keyboard shortcuts
+
+**Perfect for:**
+- Technical interviews & coding challenges
+- Online meetings & presentations
+- Academic research & exams
+- Sales calls & client demos
+- Debugging sessions & code reviews
+
+---
 
 ## Sponsored by Recall AI - API for desktop recording
-If you’re looking for a hosted desktop recording API, consider checking out [Recall.ai](https://www.recall.ai/product/desktop-recording-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=prat011-free-cluely), an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and more.
+If you're looking for a hosted desktop recording API, consider checking out [Recall.ai](https://www.recall.ai/product/desktop-recording-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=prat011-free-cluely), an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and more.
 
 ## 🚀 Quick Start Guide
 
@@ -17,8 +44,8 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
-cd free-cluely
+git clone https://github.com/ishaands12/cHeAtEr.git
+cd cHeAtEr
 ```
 
 2. Install dependencies:
@@ -111,10 +138,13 @@ The built app will be in the `release` folder.
    - For Ollama users: Make sure Ollama is running (`ollama serve`)
 
 3. **Keyboard Shortcuts**:
+   - `Cmd/Ctrl + H`: Take screenshot and add to chat
    - `Cmd/Ctrl + B`: Toggle window visibility
-   - `Cmd/Ctrl + H`: Take screenshot
-   - 'Cmd/Enter': Get solution
-   - `Cmd/Ctrl + Arrow Keys`: Move window
+   - `Cmd/Ctrl + Shift + Space`: Show and center window
+   - `Cmd/Ctrl + Enter`: Process screenshots (legacy solution mode)
+   - `Cmd/Ctrl + R`: Reset queues and view
+   - `Cmd/Ctrl + Arrow Keys`: Move window position
+   - `Cmd/Ctrl + Q`: Quit application
 
 ## 🔧 Troubleshooting
 
@@ -156,6 +186,77 @@ If you see other errors:
 - **Ubuntu/Linux**: Tested on Ubuntu 20.04+ and most Linux distros  
 - **macOS**: Native support with proper window management
 
+## 🏗️ Technology Stack
+
+### Frontend
+- **React 18** with TypeScript for UI components
+- **Vite** for blazing-fast development and build
+- **TailwindCSS v4** with PostCSS for modern styling
+- **React Query** for state management and caching
+- **Radix UI** for accessible, unstyled components
+- **React Markdown** with syntax highlighting (rehype-highlight, remark-gfm)
+- **Lucide React** for icons
+
+### Backend/Electron
+- **Electron 33.4** for cross-platform desktop support
+- **TypeScript** for type-safe Node.js code
+- **IPC (Inter-Process Communication)** for renderer-main process communication
+- **Global Shortcuts** for system-wide hotkeys
+
+### AI Integration
+- **Google Generative AI SDK** - Gemini 2.0 Flash support
+- **OpenAI SDK** - Azure OpenAI integration
+- **Ollama** - Local LLM support via HTTP API
+- Multi-model support: Llama 3.2, CodeLlama, Mistral, and more
+
+### Image & Media Processing
+- **screenshot-desktop** - Cross-platform screen capture
+- **Sharp** - High-performance image processing
+- **Tesseract.js** - OCR capabilities (future feature)
+
+### Build & Deployment
+- **electron-builder** - Package for Windows (NSIS/portable), macOS (DMG), Linux (AppImage/deb)
+- **Concurrently** - Run Vite and Electron simultaneously in dev mode
+
+---
+
+## 🎨 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Main Process (Electron)               │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              AppState (Singleton)                     │  │
+│  │  ┌────────────┐ ┌──────────────┐ ┌───────────────┐  │  │
+│  │  │  Window    │ │  Screenshot  │ │      LLM      │  │  │
+│  │  │   Helper   │ │    Helper    │ │    Helper     │  │  │
+│  │  └────────────┘ └──────────────┘ └───────────────┘  │  │
+│  │  ┌────────────┐ ┌──────────────┐                     │  │
+│  │  │ Processing │ │   Shortcuts  │                     │  │
+│  │  │   Helper   │ │    Helper    │                     │  │
+│  │  └────────────┘ └──────────────┘                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                            ↕ IPC                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │            Renderer Process (React + Vite)            │  │
+│  │   Queue.tsx  │  Solutions.tsx  │  Settings.tsx       │  │
+│  │  (Chat UI)   │ (Code Display)  │ (LLM Config)        │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            ↕ API Calls
+         ┌──────────────────────────────────────┐
+         │  Gemini API  │  Azure  │  Ollama     │
+         │  (Cloud)     │ (Cloud) │  (Local)    │
+         └──────────────────────────────────────┘
+```
+
+**Design Pattern:** Helper-based architecture with centralized AppState coordination
+- Each helper manages a specific domain (window, screenshots, AI, processing, shortcuts)
+- IPC handlers bridge React UI to Electron backend
+- React Query manages UI state and server communication
+
+---
+
 ## Key Features
 
 ### **Invisible AI Assistant**
@@ -181,6 +282,9 @@ If you see other errors:
 ### **Privacy-First Design**
 - **Local AI Option**: Use Ollama for 100% private processing
 - **Cloud Option**: Google Gemini for maximum performance
+- **🔥 Reduced Focus Mode**: Panel-type window minimizes focus stealing - reduced detection risk during proctored tests (test carefully first)
+- **Screen Capture Protection**: Protected from macOS native screen recording (see [SCREEN_CAPTURE_PROTECTION.md](SCREEN_CAPTURE_PROTECTION.md))
+- **Manual Privacy Mode**: Hide window instantly with `Cmd+Shift+Space` during screen shares
 - Screenshots auto-deleted after processing
 - No data tracking or storage
 
@@ -215,16 +319,18 @@ If you see other errors:
 ✓ Algorithm and architecture guidance
 ```
 
-## Why Choose Free Cluely?
+## 📊 Why Choose cHeAtEr?
 
-| Feature | Free Cluely | Commercial Alternatives |
-|---------|-------------|------------------------|
-| **Cost** | 100% Free | $29-99/month |
-| **Privacy** | Local AI Option | Cloud-only |
-| **Open Source** | Full transparency | Closed source |
-| **Customization** | Fully customizable | Limited options |
-| **Data Control** | You own your data | Third-party servers |
-| **Offline Mode** | Yes (with Ollama) | No |
+| Feature | cHeAtEr | Commercial Alternatives |
+|---------|---------|------------------------|
+| **Cost** | 100% Free & Open Source | $29-99/month |
+| **Privacy** | Local AI with Ollama | Cloud-only |
+| **Source Code** | Fully transparent | Closed source |
+| **Customization** | Fork & modify freely | Limited options |
+| **Data Control** | You own everything | Third-party servers |
+| **Offline Mode** | Yes (Ollama) | No |
+| **Multi-LLM** | Gemini, Azure, Ollama | Single provider |
+| **Screen Protection** | Built-in (macOS) | Not available |
 
 ## Technical Details
 
@@ -244,24 +350,57 @@ Optimal: 16GB+ RAM for local AI models
 
 ## 🤝 Contributing
 
-This project welcomes contributions! While I have limited time for active maintenance, I'll review and merge quality PRs.
+Contributions are welcome! Whether it's bug fixes, new features, or documentation improvements, feel free to open a PR.
 
 **Ways to contribute:**
 - 🐛 Bug fixes and stability improvements
-- ✨ New features and AI model integrations  
+- ✨ New features and AI model integrations
 - 📚 Documentation and tutorial improvements
 - 🌍 Translations and internationalization
 - 🎨 UI/UX enhancements
+- 🔧 Performance optimizations
 
-For commercial integrations or custom development, reach out on [Twitter](https://x.com/prathitjoshi_)
+**Development workflow:**
+```bash
+# Fork and clone the repo
+git clone https://github.com/ishaands12/cHeAtEr.git
+cd cHeAtEr
+
+# Install dependencies
+npm install
+
+# Run in development mode
+npm start
+
+# Build for production
+npm run dist
+```
 
 ## 📄 License
 
 ISC License - Free for personal and commercial use.
 
+## ⚠️ Disclaimer
+
+This tool is intended for educational purposes, authorized security testing, personal productivity, and legitimate use cases. Users are responsible for ensuring compliance with all applicable laws, regulations, and terms of service. The developers assume no liability for misuse.
+
 ---
 
-**⭐ Star this repo if Free Cluely helps you succeed in meetings, interviews, or presentations!**
+## 🌟 Show Your Support
 
-### 🏷️ Tags
-`ai-assistant` `meeting-notes` `interview-helper` `presentation-support` `ollama` `gemini-ai` `electron-app` `cross-platform` `privacy-focused` `open-source` `local-ai` `screenshot-analysis` `academic-helper` `sales-assistant` `coding-companion`
+If cHeAtEr helps you ace interviews, meetings, or coding challenges:
+- ⭐ **Star this repository**
+- 🐛 **Report bugs** via [GitHub Issues](https://github.com/ishaands12/cHeAtEr/issues)
+- 💡 **Share ideas** for new features
+- 🤝 **Contribute** code or documentation
+
+---
+
+### 🏷️ Keywords
+`ai-assistant` `electron` `react` `typescript` `ollama` `gemini-ai` `llm` `interview-helper` `coding-assistant` `meeting-notes` `screenshot-ocr` `cross-platform` `privacy-first` `open-source` `local-ai` `screen-capture` `desktop-app` `productivity-tool`
+
+---
+
+**Made with ☕ by developers who needed an invisible AI wingman**
+
+Repository: [https://github.com/ishaands12/cHeAtEr](https://github.com/ishaands12/cHeAtEr)

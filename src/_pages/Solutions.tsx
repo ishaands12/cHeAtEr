@@ -15,7 +15,6 @@ import {
 import { ProblemStatementData } from "../types/solutions"
 import { AudioResult } from "../types/audio"
 import SolutionCommands from "../components/Solutions/SolutionCommands"
-import Debug from "./Debug"
 
 // (Using global ElectronAPI type from src/types/electron.d.ts)
 
@@ -125,7 +124,7 @@ export const ComplexitySection = ({
 )
 
 interface SolutionsProps {
-  setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
+  setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug" | "settings">>
 }
 const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   const queryClient = useQueryClient()
@@ -445,14 +444,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
   return (
     <>
-      {!isResetting && queryClient.getQueryData(["new_solution"]) ? (
-        <>
-          <Debug
-            isProcessing={debugProcessing}
-            setIsProcessing={setDebugProcessing}
-          />
-        </>
-      ) : (
+      {queryClient.getQueryData(["new_solution"]) && !isResetting && (
         <div ref={contentRef} className="relative space-y-3 px-4 py-3">
           <Toast
             open={toastOpen}

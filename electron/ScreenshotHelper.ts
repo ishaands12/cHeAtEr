@@ -11,13 +11,19 @@ export class ScreenshotHelper {
   private extraScreenshotQueue: string[] = []
   private readonly MAX_SCREENSHOTS = 5
 
-  private readonly screenshotDir: string
-  private readonly extraScreenshotDir: string
+  private screenshotDir: string = ""
+  private extraScreenshotDir: string = ""
+  private directoriesInitialized: boolean = false
 
   private view: "queue" | "solutions" = "queue"
 
   constructor(view: "queue" | "solutions" = "queue") {
     this.view = view
+    // Don't initialize directories here - wait until app is ready
+  }
+
+  private initializeDirectories(): void {
+    if (this.directoriesInitialized) return
 
     // Initialize directories
     this.screenshotDir = path.join(app.getPath("userData"), "screenshots")
@@ -25,13 +31,22 @@ export class ScreenshotHelper {
       app.getPath("userData"),
       "extra_screenshots"
     )
+    this.directoriesInitialized = true
 
-    // Create directories if they don't exist
-    if (!fs.existsSync(this.screenshotDir)) {
-      fs.mkdirSync(this.screenshotDir)
-    }
-    if (!fs.existsSync(this.extraScreenshotDir)) {
-      fs.mkdirSync(this.extraScreenshotDir)
+    // Create directories if they don't exist (with recursive option)
+    this.ensureDirectoriesExist()
+  }
+
+  private ensureDirectoriesExist(): void {
+    try {
+      if (!fs.existsSync(this.screenshotDir)) {
+        fs.mkdirSync(this.screenshotDir, { recursive: true })
+      }
+      if (!fs.existsSync(this.extraScreenshotDir)) {
+        fs.mkdirSync(this.extraScreenshotDir, { recursive: true })
+      }
+    } catch (error) {
+      console.error("Error creating screenshot directories:", error)
     }
   }
 
@@ -79,57 +94,85 @@ export class ScreenshotHelper {
     showMainWindow: () => void
   ): Promise<string> {
     try {
+      // Initialize directories on first use
+      this.initializeDirectories()
+      // Ensure directories exist before taking screenshot
+      this.ensureDirectoriesExist()
+
+      console.log("[ScreenshotHelper] Hiding main window...")
       hideMainWindow()
-      
+
       // Add a small delay to ensure window is hidden
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
+      await new Promise(resolve => setTimeout(resolve, 200))
+
       let screenshotPath = ""
 
-      if (this.view === "queue") {
-        screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
-        await screenshot({ filename: screenshotPath })
+      console.log("[ScreenshotHelper] Attempting to capture screenshot...")
 
-        this.screenshotQueue.push(screenshotPath)
-        if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.screenshotQueue.shift()
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath)
-            } catch (error) {
-              console.error("Error removing old screenshot:", error)
+      try {
+        // Capture screenshot as buffer and write manually
+        const imgBuffer = await screenshot({ format: 'png' })
+
+        if (!imgBuffer || imgBuffer.length === 0) {
+          throw new Error("Screenshot buffer is empty")
+        }
+
+        console.log(`[ScreenshotHelper] Screenshot captured, buffer size: ${imgBuffer.length} bytes`)
+
+        if (this.view === "queue") {
+          screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
+          await fs.promises.writeFile(screenshotPath, imgBuffer)
+          console.log(`[ScreenshotHelper] Screenshot saved to: ${screenshotPath}`)
+
+          this.screenshotQueue.push(screenshotPath)
+          if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
+            const removedPath = this.screenshotQueue.shift()
+            if (removedPath) {
+              try {
+                await fs.promises.unlink(removedPath)
+                console.log(`[ScreenshotHelper] Removed old screenshot: ${removedPath}`)
+              } catch (error) {
+                console.error("Error removing old screenshot:", error)
+              }
+            }
+          }
+        } else {
+          screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
+          await fs.promises.writeFile(screenshotPath, imgBuffer)
+          console.log(`[ScreenshotHelper] Extra screenshot saved to: ${screenshotPath}`)
+
+          this.extraScreenshotQueue.push(screenshotPath)
+          if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
+            const removedPath = this.extraScreenshotQueue.shift()
+            if (removedPath) {
+              try {
+                await fs.promises.unlink(removedPath)
+                console.log(`[ScreenshotHelper] Removed old extra screenshot: ${removedPath}`)
+              } catch (error) {
+                console.error("Error removing old extra screenshot:", error)
+              }
             }
           }
         }
-      } else {
-        screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
-        await screenshot({ filename: screenshotPath })
 
-        this.extraScreenshotQueue.push(screenshotPath)
-        if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.extraScreenshotQueue.shift()
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath)
-            } catch (error) {
-              console.error("Error removing old screenshot:", error)
-            }
-          }
-        }
+        return screenshotPath
+      } catch (screenshotError) {
+        console.error("[ScreenshotHelper] Failed to capture screenshot:", screenshotError)
+        throw new Error(`Failed to capture screenshot: ${screenshotError.message}`)
       }
-
-      return screenshotPath
     } catch (error) {
-      console.error("Error taking screenshot:", error)
+      console.error("[ScreenshotHelper] Error in takeScreenshot:", error)
       throw new Error(`Failed to take screenshot: ${error.message}`)
     } finally {
       // Ensure window is always shown again
+      console.log("[ScreenshotHelper] Showing main window...")
       showMainWindow()
     }
   }
 
   public async getImagePreview(filepath: string): Promise<string> {
     try {
+      this.initializeDirectories()
       const data = await fs.promises.readFile(filepath)
       return `data:image/png;base64,${data.toString("base64")}`
     } catch (error) {

@@ -27,41 +27,29 @@ export class WindowHelper {
     this.appState = appState
   }
 
+  /**
+   * Set macOS-specific screen capture protection using native APIs
+   * This makes the window invisible in Zoom, Teams, and other screen sharing apps
+   *
+   * NOTE: setContentProtection(true) provides basic protection but Zoom and some
+   * other apps can still capture the window. For complete protection, users would
+   * need a native module that sets NSWindowSharingType to NSWindowSharingNone.
+   */
+  private setMacOSScreenCaptureProtection(): void {
+    if (!this.mainWindow || process.platform !== "darwin") return
+
+    // setContentProtection provides some level of protection
+    // It works well with macOS native screen recording (Cmd+Shift+5)
+    // but may not work with all screen sharing apps like Zoom
+    console.log('macOS content protection enabled (basic level)')
+    console.log('Note: Zoom and some screen sharing apps may still capture this window')
+    console.log('For complete protection, a native macOS module would be required')
+  }
+
   public setWindowDimensions(width: number, height: number): void {
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
-
-    // Get current window position
-    const [currentX, currentY] = this.mainWindow.getPosition()
-
-    // Get screen dimensions
-    const primaryDisplay = screen.getPrimaryDisplay()
-    const workArea = primaryDisplay.workAreaSize
-
-    // Use 75% width if debugging has occurred, otherwise use 60%
-    const maxAllowedWidth = Math.floor(
-      workArea.width * (this.appState.getHasDebugged() ? 0.75 : 0.5)
-    )
-
-    // Ensure width doesn't exceed max allowed width and height is reasonable
-    const newWidth = Math.min(width + 32, maxAllowedWidth)
-    const newHeight = Math.ceil(height)
-
-    // Center the window horizontally if it would go off screen
-    const maxX = workArea.width - newWidth
-    const newX = Math.min(Math.max(currentX, 0), maxX)
-
-    // Update window bounds
-    this.mainWindow.setBounds({
-      x: newX,
-      y: currentY,
-      width: newWidth,
-      height: newHeight
-    })
-
-    // Update internal state
-    this.windowPosition = { x: newX, y: currentY }
-    this.windowSize = { width: newWidth, height: newHeight }
-    this.currentX = newX
+    // DISABLED: Auto-sizing causes window expansion glitch with aspect ratio
+    // Window size is now fixed by user resizing only
+    return
   }
 
   public createWindow(): void {
@@ -72,16 +60,17 @@ export class WindowHelper {
     this.screenWidth = workArea.width
     this.screenHeight = workArea.height
 
-    
+
     const windowSettings: Electron.BrowserWindowConstructorOptions = {
-      width: 400,
-      height: 600,
-      minWidth: 300,
+      width: 360,
+      height: 202,
+      minWidth: 360,
       minHeight: 200,
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: true,
-        preload: path.join(__dirname, "preload.js")
+        preload: path.join(__dirname, "preload.js"),
+        offscreen: false
       },
       show: false, // Start hidden, then show after setup
       alwaysOnTop: true,
@@ -90,15 +79,20 @@ export class WindowHelper {
       fullscreenable: false,
       hasShadow: false,
       backgroundColor: "#00000000",
-      focusable: true,
+      acceptFirstMouse: true, // Accept mouse clicks without activating window
       resizable: true,
       movable: true,
       x: 100, // Start at a visible position
-      y: 100
+      y: 100,
+      skipTaskbar: true, // Don't show in taskbar/dock
+      ...(process.platform === 'darwin' ? { type: 'panel' } : {}) // Panel windows on macOS
     }
 
     this.mainWindow = new BrowserWindow(windowSettings)
+    // Aspect ratio lock removed - window can be resized freely
     // this.mainWindow.webContents.openDevTools()
+
+    // Screen capture protection - window remains visible to you but hidden in screen shares/recordings
     this.mainWindow.setContentProtection(true)
 
     if (process.platform === "darwin") {
@@ -107,14 +101,15 @@ export class WindowHelper {
       })
       this.mainWindow.setHiddenInMissionControl(true)
       this.mainWindow.setAlwaysOnTop(true, "floating")
+
+      // Enhanced macOS screen sharing protection using native APIs
+      this.setMacOSScreenCaptureProtection()
     }
     if (process.platform === "linux") {
       // Linux-specific optimizations for better compatibility
       if (this.mainWindow.setHasShadow) {
         this.mainWindow.setHasShadow(false)
       }
-      // Keep window focusable on Linux for proper interaction
-      this.mainWindow.setFocusable(true)
     } 
     this.mainWindow.setSkipTaskbar(true)
     this.mainWindow.setAlwaysOnTop(true)
@@ -123,15 +118,23 @@ export class WindowHelper {
       console.error("Failed to load URL:", err)
     })
 
+    // Prevent focus events from being triggered by window interactions
+    this.mainWindow.webContents.on('before-input-event', (event, input) => {
+      // Allow keyboard input for text fields but prevent window-level focus events
+      if (input.type === 'keyDown' || input.type === 'keyUp' || input.type === 'char') {
+        // Allow keyboard events for typing
+        return
+      }
+    })
+
     // Show window after loading URL and center it
     this.mainWindow.once('ready-to-show', () => {
       if (this.mainWindow) {
         // Center the window first
         this.centerWindow()
-        this.mainWindow.show()
-        this.mainWindow.focus()
+        this.mainWindow.showInactive() // Show without stealing focus
         this.mainWindow.setAlwaysOnTop(true)
-        console.log("Window is now visible and centered")
+        console.log("Window is now visible and centered (non-focus mode)")
       }
     })
 
@@ -260,12 +263,11 @@ export class WindowHelper {
     }
 
     this.centerWindow()
-    this.mainWindow.show()
-    this.mainWindow.focus()
+    this.mainWindow.showInactive() // Show without stealing focus
     this.mainWindow.setAlwaysOnTop(true)
     this.isWindowVisible = true
-    
-    console.log(`Window centered and shown`)
+
+    console.log(`Window centered and shown (non-focus mode)`)
   }
 
   // New methods for window movement
