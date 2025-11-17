@@ -27,11 +27,6 @@ cHeAtEr is a privacy-focused AI assistant that runs as an invisible overlay on y
 - Sales calls & client demos
 - Debugging sessions & code reviews
 
----
-
-## Sponsored by Recall AI - API for desktop recording
-If you're looking for a hosted desktop recording API, consider checking out [Recall.ai](https://www.recall.ai/product/desktop-recording-sdk?utm_source=github&utm_medium=sponsorship&utm_campaign=prat011-free-cluely), an API that records Zoom, Google Meet, Microsoft Teams, in-person meetings, and more.
-
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
