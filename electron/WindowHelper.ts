@@ -104,6 +104,17 @@ export class WindowHelper {
 
       // Enhanced macOS screen sharing protection using native APIs
       this.setMacOSScreenCaptureProtection()
+
+      // Prevent the window from ever taking focus when moved or interacted with
+      // This keeps the underlying app focused even when the window is dragged
+      try {
+        // @ts-ignore - accessing internal getNativeWindowHandle for advanced control
+        const nativeHandle = this.mainWindow.getNativeWindowHandle()
+        // Setting window level to floating ensures it doesn't steal focus
+        this.mainWindow.setAlwaysOnTop(true, "pop-up-menu", 1)
+      } catch (e) {
+        console.log("Could not set advanced window level:", e)
+      }
     }
     if (process.platform === "linux") {
       // Linux-specific optimizations for better compatibility
@@ -151,12 +162,32 @@ export class WindowHelper {
   private setupWindowListeners(): void {
     if (!this.mainWindow) return
 
+    let isMoving = false
+
+    // Track when window starts moving (user dragging)
+    this.mainWindow.on("will-move", () => {
+      isMoving = true
+    })
+
     this.mainWindow.on("move", () => {
       if (this.mainWindow) {
         const bounds = this.mainWindow.getBounds()
         this.windowPosition = { x: bounds.x, y: bounds.y }
         this.currentX = bounds.x
         this.currentY = bounds.y
+      }
+    })
+
+    // When move ends, blur to prevent focus stealing
+    this.mainWindow.on("moved", () => {
+      if (isMoving && this.mainWindow) {
+        // Small delay to ensure the window finishes moving
+        setTimeout(() => {
+          if (this.mainWindow) {
+            this.mainWindow.blur()
+          }
+          isMoving = false
+        }, 10)
       }
     })
 
@@ -172,6 +203,15 @@ export class WindowHelper {
       this.isWindowVisible = false
       this.windowPosition = null
       this.windowSize = null
+    })
+
+    // Prevent focus when window tries to focus (unless user is typing)
+    this.mainWindow.on("focus", () => {
+      // Only allow focus if user intentionally clicked on an input field
+      // Otherwise, blur to keep underlying window focused
+      if (this.mainWindow && isMoving) {
+        this.mainWindow.blur()
+      }
     })
   }
 
@@ -275,6 +315,7 @@ export class WindowHelper {
     if (!this.mainWindow) return
 
     const windowWidth = this.windowSize?.width || 0
+    const windowHeight = this.windowSize?.height || 0
     const halfWidth = windowWidth / 2
 
     // Ensure currentX and currentY are numbers
@@ -285,16 +326,21 @@ export class WindowHelper {
       this.screenWidth - halfWidth,
       this.currentX + this.step
     )
-    this.mainWindow.setPosition(
-      Math.round(this.currentX),
-      Math.round(this.currentY)
-    )
+
+    // Use setBounds with animate: false to avoid focus stealing
+    this.mainWindow.setBounds({
+      x: Math.round(this.currentX),
+      y: Math.round(this.currentY),
+      width: windowWidth,
+      height: windowHeight
+    }, false) // false = no animation, reduces focus events
   }
 
   public moveWindowLeft(): void {
     if (!this.mainWindow) return
 
     const windowWidth = this.windowSize?.width || 0
+    const windowHeight = this.windowSize?.height || 0
     const halfWidth = windowWidth / 2
 
     // Ensure currentX and currentY are numbers
@@ -302,15 +348,19 @@ export class WindowHelper {
     this.currentY = Number(this.currentY) || 0
 
     this.currentX = Math.max(-halfWidth, this.currentX - this.step)
-    this.mainWindow.setPosition(
-      Math.round(this.currentX),
-      Math.round(this.currentY)
-    )
+
+    this.mainWindow.setBounds({
+      x: Math.round(this.currentX),
+      y: Math.round(this.currentY),
+      width: windowWidth,
+      height: windowHeight
+    }, false)
   }
 
   public moveWindowDown(): void {
     if (!this.mainWindow) return
 
+    const windowWidth = this.windowSize?.width || 0
     const windowHeight = this.windowSize?.height || 0
     const halfHeight = windowHeight / 2
 
@@ -322,15 +372,19 @@ export class WindowHelper {
       this.screenHeight - halfHeight,
       this.currentY + this.step
     )
-    this.mainWindow.setPosition(
-      Math.round(this.currentX),
-      Math.round(this.currentY)
-    )
+
+    this.mainWindow.setBounds({
+      x: Math.round(this.currentX),
+      y: Math.round(this.currentY),
+      width: windowWidth,
+      height: windowHeight
+    }, false)
   }
 
   public moveWindowUp(): void {
     if (!this.mainWindow) return
 
+    const windowWidth = this.windowSize?.width || 0
     const windowHeight = this.windowSize?.height || 0
     const halfHeight = windowHeight / 2
 
@@ -339,9 +393,12 @@ export class WindowHelper {
     this.currentY = Number(this.currentY) || 0
 
     this.currentY = Math.max(-halfHeight, this.currentY - this.step)
-    this.mainWindow.setPosition(
-      Math.round(this.currentX),
-      Math.round(this.currentY)
-    )
+
+    this.mainWindow.setBounds({
+      x: Math.round(this.currentX),
+      y: Math.round(this.currentY),
+      width: windowWidth,
+      height: windowHeight
+    }, false)
   }
 }
