@@ -216,9 +216,17 @@ Always respond to the user's actual question directly.`
     "problem_statement": "Restate the problem or situation.",
     "context": "Relevant background/context.",
     "suggested_responses": ["First possible answer or action", "Second possible answer or action", "..."],
-    "reasoning": "Explanation of why these suggestions are appropriate."
+    "reasoning": "Explanation of why these suggestions are appropriate.",
+    "confidence": 0.85
   }
-}\nImportant: Return ONLY the JSON object, without any markdown formatting or code blocks.`
+}\n\nThe confidence field should be a number between 0 and 1, where:
+- 0.9-1.0: Very confident (clear problem, well-known solution pattern)
+- 0.7-0.9: Confident (understood problem, likely correct solution)
+- 0.5-0.7: Moderate (some ambiguity or assumptions made)
+- 0.3-0.5: Low (unclear problem or speculative solution)
+- 0.0-0.3: Very low (highly uncertain or incomplete information)
+
+Important: Return ONLY the JSON object, without any markdown formatting or code blocks.`
 
     console.log("[LLMHelper] Calling Azure OpenAI for solution...");
     try {

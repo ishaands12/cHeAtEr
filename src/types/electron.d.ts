@@ -22,6 +22,13 @@ export interface ElectronAPI {
   moveWindowRight?: () => Promise<void>
   moveWindowUp?: () => Promise<void>
   moveWindowDown?: () => Promise<void>
+  snapToTopLeft?: () => Promise<void>
+  snapToTopRight?: () => Promise<void>
+  snapToBottomLeft?: () => Promise<void>
+  snapToBottomRight?: () => Promise<void>
+  setWindowOpacity?: (opacity: number) => Promise<void>
+  getWindowOpacity?: () => Promise<number>
+  onCopyLastResponse?: (callback: () => void) => () => void
   analyzeAudioFromBase64?: (data: string, mimeType: string) => Promise<{ text: string; timestamp: number }>
   analyzeAudioFile?: (path: string) => Promise<{ text: string; timestamp: number }>
   quitApp?: () => Promise<void>

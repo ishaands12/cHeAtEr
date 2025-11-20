@@ -30,6 +30,13 @@ interface ElectronAPI {
   moveWindowRight: () => Promise<void>
   moveWindowUp: () => Promise<void>
   moveWindowDown: () => Promise<void>
+  snapToTopLeft: () => Promise<void>
+  snapToTopRight: () => Promise<void>
+  snapToBottomLeft: () => Promise<void>
+  snapToBottomRight: () => Promise<void>
+  setWindowOpacity: (opacity: number) => Promise<void>
+  getWindowOpacity: () => Promise<number>
+  onCopyLastResponse: (callback: () => void) => () => void
   analyzeAudioFromBase64: (data: string, mimeType: string) => Promise<{ text: string; timestamp: number }>
   analyzeAudioFile: (path: string) => Promise<{ text: string; timestamp: number }>
   analyzeImageFile: (path: string) => Promise<void>
@@ -175,6 +182,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   moveWindowRight: () => ipcRenderer.invoke("move-window-right"),
   moveWindowUp: () => ipcRenderer.invoke("move-window-up"),
   moveWindowDown: () => ipcRenderer.invoke("move-window-down"),
+  snapToTopLeft: () => ipcRenderer.invoke("snap-to-top-left"),
+  snapToTopRight: () => ipcRenderer.invoke("snap-to-top-right"),
+  snapToBottomLeft: () => ipcRenderer.invoke("snap-to-bottom-left"),
+  snapToBottomRight: () => ipcRenderer.invoke("snap-to-bottom-right"),
+  setWindowOpacity: (opacity: number) => ipcRenderer.invoke("set-window-opacity", opacity),
+  getWindowOpacity: () => ipcRenderer.invoke("get-window-opacity"),
+  onCopyLastResponse: (callback: () => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on("copy-last-response", subscription)
+    return () => {
+      ipcRenderer.removeListener("copy-last-response", subscription)
+    }
+  },
   analyzeAudioFromBase64: (data: string, mimeType: string) => ipcRenderer.invoke("analyze-audio-base64", data, mimeType),
   analyzeAudioFile: (path: string) => ipcRenderer.invoke("analyze-audio-file", path),
   analyzeImageFile: (path: string) => ipcRenderer.invoke("analyze-image-file", path),

@@ -267,11 +267,24 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   outline: none;
+  min-width: 50px;
 }
 
 .copy-button:hover {
   background: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.9);
+}
+
+.copy-button.copying {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: rgba(34, 197, 94, 1);
+  transform: scale(1.05);
+}
+
+.copy-button:disabled {
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .response-content {
@@ -458,6 +471,10 @@ body {
   min-height: 28px;
 }
 
+.action-button:active {
+  transform: scale(0.98);
+}
+
 .action-button:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.16);
@@ -480,9 +497,14 @@ body {
   border-color: rgba(96, 165, 250, 0.5);
 }
 
+.send-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
 .send-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 /* ============ LOADING & STATUS INDICATORS ============ */
@@ -496,6 +518,12 @@ body {
   font-weight: 500;
 }
 
+.loading-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  margin-right: 4px;
+}
+
 .loading-dot {
   width: 5px;
   height: 5px;
@@ -504,9 +532,9 @@ body {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.loading-dot:nth-child(1) { animation-delay: 0s; }
-.loading-dot:nth-child(2) { animation-delay: 0.2s; }
-.loading-dot:nth-child(3) { animation-delay: 0.4s; }
+.loading-dot:nth-child(2) { animation-delay: 0s; }
+.loading-dot:nth-child(3) { animation-delay: 0.2s; }
+.loading-dot:nth-child(4) { animation-delay: 0.4s; }
 
 /* ============ ANIMATIONS ============ */
 
@@ -533,6 +561,12 @@ body {
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
 }
 
 @keyframes slideInDown {
@@ -648,4 +682,208 @@ body {
     padding: 5px 8px;
     font-size: 11px;
   }
+}
+
+/* ============ LIGHT THEME OVERRIDES ============ */
+
+.light body {
+  color: rgba(0, 0, 0, 0.95);
+}
+
+.light .app-container {
+  background: rgba(240, 240, 245, 0.85);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.light .app-container::before {
+  background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.05), transparent 70%);
+}
+
+.light .top-bar {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.light .app-logo {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.light .icon-button {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.light .icon-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.light .icon-button.close {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: rgba(185, 28, 28, 0.8);
+}
+
+.light .icon-button.close:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: rgba(185, 28, 28, 1);
+}
+
+.light .response-area::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.light .response-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.light .response-empty {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.light .response-card {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.light .response-card.user {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.light .response-card.ai {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.light .response-card-role {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.light .copy-button {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.light .copy-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.light .response-content {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.light .markdown-content {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.light .markdown-content code {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1e40af;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.light .markdown-content pre {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.light .markdown-content pre code {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.light .markdown-content h1,
+.light .markdown-content h2,
+.light .markdown-content h3 {
+  color: rgba(0, 0, 0, 0.95);
+}
+
+.light .markdown-content li {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.light .markdown-content a {
+  color: #2563eb;
+}
+
+.light .markdown-content a:hover {
+  color: #1d4ed8;
+}
+
+.light .markdown-content blockquote {
+  border-left-color: #2563eb;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.light .input-section {
+  border-top-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.light .message-input {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.95);
+}
+
+.light .message-input::placeholder {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+.light .message-input:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+.light .message-input:focus {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.light .action-button {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.light .action-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.16);
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.light .send-button {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.7), rgba(99, 102, 241, 0.7));
+  border-color: rgba(59, 130, 246, 0.4);
+  color: white;
+}
+
+.light .send-button:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.85), rgba(99, 102, 241, 0.85));
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.light .loading-indicator {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.light .loading-dot {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.light .modal-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.light .modal-content {
+  background: rgba(240, 240, 245, 0.95);
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }

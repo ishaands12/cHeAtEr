@@ -138,6 +138,32 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.centerAndShowWindow()
   })
 
+  // Corner snap handlers
+  ipcMain.handle("snap-to-top-left", async () => {
+    appState.snapToTopLeft()
+  })
+
+  ipcMain.handle("snap-to-top-right", async () => {
+    appState.snapToTopRight()
+  })
+
+  ipcMain.handle("snap-to-bottom-left", async () => {
+    appState.snapToBottomLeft()
+  })
+
+  ipcMain.handle("snap-to-bottom-right", async () => {
+    appState.snapToBottomRight()
+  })
+
+  // Opacity control handlers
+  ipcMain.handle("set-window-opacity", async (_, opacity: number) => {
+    appState.setWindowOpacity(opacity)
+  })
+
+  ipcMain.handle("get-window-opacity", async () => {
+    return appState.getWindowOpacity()
+  })
+
   // LLM Model Management Handlers
   ipcMain.handle("get-current-llm-config", async () => {
     try {

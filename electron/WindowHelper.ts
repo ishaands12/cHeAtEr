@@ -53,12 +53,17 @@ export class WindowHelper {
   }
 
   public createWindow(): void {
-    if (this.mainWindow !== null) return
+    console.log("=== CREATE WINDOW CALLED ===")
+    if (this.mainWindow !== null) {
+      console.log("Window already exists, skipping creation")
+      return
+    }
 
     const primaryDisplay = screen.getPrimaryDisplay()
     const workArea = primaryDisplay.workAreaSize
     this.screenWidth = workArea.width
     this.screenHeight = workArea.height
+    console.log("Screen dimensions:", this.screenWidth, "x", this.screenHeight)
 
 
     const windowSettings: Electron.BrowserWindowConstructorOptions = {
@@ -72,28 +77,30 @@ export class WindowHelper {
         preload: path.join(__dirname, "preload.js"),
         offscreen: false
       },
-      show: false, // Start hidden, then show after setup
+      show: true,
       alwaysOnTop: true,
       frame: false,
       transparent: true,
       fullscreenable: false,
       hasShadow: false,
       backgroundColor: "#00000000",
-      acceptFirstMouse: true, // Accept mouse clicks without activating window
+      acceptFirstMouse: true,
       resizable: true,
       movable: true,
-      x: 100, // Start at a visible position
+      x: 100,
       y: 100,
-      skipTaskbar: true, // Don't show in taskbar/dock
-      ...(process.platform === 'darwin' ? { type: 'panel' } : {}) // Panel windows on macOS
+      skipTaskbar: true,
+      ...(process.platform === 'darwin' ? { type: 'panel' } : {})
     }
 
     this.mainWindow = new BrowserWindow(windowSettings)
+    console.log("BrowserWindow created successfully")
     // Aspect ratio lock removed - window can be resized freely
     // this.mainWindow.webContents.openDevTools()
 
     // Screen capture protection - window remains visible to you but hidden in screen shares/recordings
     this.mainWindow.setContentProtection(true)
+    console.log("Content protection enabled")
 
     if (process.platform === "darwin") {
       this.mainWindow.setVisibleOnAllWorkspaces(true, {
@@ -125,8 +132,12 @@ export class WindowHelper {
     this.mainWindow.setSkipTaskbar(true)
     this.mainWindow.setAlwaysOnTop(true)
 
-    this.mainWindow.loadURL(startUrl).catch((err) => {
+    console.log("Loading URL:", startUrl)
+    this.mainWindow.loadURL(startUrl).then(() => {
+      console.log("URL loaded successfully")
+    }).catch((err) => {
       console.error("Failed to load URL:", err)
+      console.error("URL was:", startUrl)
     })
 
     // Prevent focus events from being triggered by window interactions
@@ -141,11 +152,15 @@ export class WindowHelper {
     // Show window after loading URL and center it
     this.mainWindow.once('ready-to-show', () => {
       if (this.mainWindow) {
+        console.log("=== WINDOW READY TO SHOW ===")
         // Center the window first
         this.centerWindow()
         this.mainWindow.showInactive() // Show without stealing focus
         this.mainWindow.setAlwaysOnTop(true)
         console.log("Window is now visible and centered (non-focus mode)")
+        console.log("Window bounds:", this.mainWindow.getBounds())
+        console.log("Window visible:", this.mainWindow.isVisible())
+        console.log("Window opacity:", this.mainWindow.getOpacity())
       }
     })
 
@@ -162,32 +177,12 @@ export class WindowHelper {
   private setupWindowListeners(): void {
     if (!this.mainWindow) return
 
-    let isMoving = false
-
-    // Track when window starts moving (user dragging)
-    this.mainWindow.on("will-move", () => {
-      isMoving = true
-    })
-
     this.mainWindow.on("move", () => {
       if (this.mainWindow) {
         const bounds = this.mainWindow.getBounds()
         this.windowPosition = { x: bounds.x, y: bounds.y }
         this.currentX = bounds.x
         this.currentY = bounds.y
-      }
-    })
-
-    // When move ends, blur to prevent focus stealing
-    this.mainWindow.on("moved", () => {
-      if (isMoving && this.mainWindow) {
-        // Small delay to ensure the window finishes moving
-        setTimeout(() => {
-          if (this.mainWindow) {
-            this.mainWindow.blur()
-          }
-          isMoving = false
-        }, 10)
       }
     })
 
@@ -203,15 +198,6 @@ export class WindowHelper {
       this.isWindowVisible = false
       this.windowPosition = null
       this.windowSize = null
-    })
-
-    // Prevent focus when window tries to focus (unless user is typing)
-    this.mainWindow.on("focus", () => {
-      // Only allow focus if user intentionally clicked on an input field
-      // Otherwise, blur to keep underlying window focused
-      if (this.mainWindow && isMoving) {
-        this.mainWindow.blur()
-      }
     })
   }
 
@@ -305,6 +291,7 @@ export class WindowHelper {
     this.centerWindow()
     this.mainWindow.showInactive() // Show without stealing focus
     this.mainWindow.setAlwaysOnTop(true)
+
     this.isWindowVisible = true
 
     console.log(`Window centered and shown (non-focus mode)`)
@@ -400,5 +387,107 @@ export class WindowHelper {
       width: windowWidth,
       height: windowHeight
     }, false)
+  }
+
+  // Corner snap methods
+  public snapToTopLeft(): void {
+    if (!this.mainWindow) return
+
+    const windowWidth = this.windowSize?.width || 360
+    const windowHeight = this.windowSize?.height || 202
+
+    this.currentX = 0
+    this.currentY = 0
+
+    this.mainWindow.setBounds({
+      x: 0,
+      y: 0,
+      width: windowWidth,
+      height: windowHeight
+    }, false)
+
+    this.windowPosition = { x: 0, y: 0 }
+    console.log("Window snapped to top-left corner")
+  }
+
+  public snapToTopRight(): void {
+    if (!this.mainWindow) return
+
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const workArea = primaryDisplay.workAreaSize
+    const windowWidth = this.windowSize?.width || 360
+    const windowHeight = this.windowSize?.height || 202
+
+    this.currentX = workArea.width - windowWidth
+    this.currentY = 0
+
+    this.mainWindow.setBounds({
+      x: this.currentX,
+      y: 0,
+      width: windowWidth,
+      height: windowHeight
+    }, false)
+
+    this.windowPosition = { x: this.currentX, y: 0 }
+    console.log("Window snapped to top-right corner")
+  }
+
+  public snapToBottomLeft(): void {
+    if (!this.mainWindow) return
+
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const workArea = primaryDisplay.workAreaSize
+    const windowWidth = this.windowSize?.width || 360
+    const windowHeight = this.windowSize?.height || 202
+
+    this.currentX = 0
+    this.currentY = workArea.height - windowHeight
+
+    this.mainWindow.setBounds({
+      x: 0,
+      y: this.currentY,
+      width: windowWidth,
+      height: windowHeight
+    }, false)
+
+    this.windowPosition = { x: 0, y: this.currentY }
+    console.log("Window snapped to bottom-left corner")
+  }
+
+  public snapToBottomRight(): void {
+    if (!this.mainWindow) return
+
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const workArea = primaryDisplay.workAreaSize
+    const windowWidth = this.windowSize?.width || 360
+    const windowHeight = this.windowSize?.height || 202
+
+    this.currentX = workArea.width - windowWidth
+    this.currentY = workArea.height - windowHeight
+
+    this.mainWindow.setBounds({
+      x: this.currentX,
+      y: this.currentY,
+      width: windowWidth,
+      height: windowHeight
+    }, false)
+
+    this.windowPosition = { x: this.currentX, y: this.currentY }
+    console.log("Window snapped to bottom-right corner")
+  }
+
+  // Opacity control
+  public setWindowOpacity(opacity: number): void {
+    if (!this.mainWindow) return
+
+    // Clamp opacity between 0.1 and 1.0
+    const clampedOpacity = Math.max(0.1, Math.min(1.0, opacity))
+    this.mainWindow.setOpacity(clampedOpacity)
+    console.log(`Window opacity set to ${clampedOpacity}`)
+  }
+
+  public getWindowOpacity(): number {
+    if (!this.mainWindow) return 1.0
+    return this.mainWindow.getOpacity()
   }
 }

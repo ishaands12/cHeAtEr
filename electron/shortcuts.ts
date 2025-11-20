@@ -109,6 +109,36 @@ export class ShortcutsHelper {
       }
     })
 
+    // Corner snap shortcuts (using Alt to avoid macOS screenshot conflicts)
+    globalShortcut.register("CommandOrControl+Alt+1", () => {
+      console.log("Cmd+Alt+1 pressed. Snapping window to top-left corner.")
+      this.appState.snapToTopLeft()
+    })
+
+    globalShortcut.register("CommandOrControl+Alt+2", () => {
+      console.log("Cmd+Alt+2 pressed. Snapping window to top-right corner.")
+      this.appState.snapToTopRight()
+    })
+
+    globalShortcut.register("CommandOrControl+Alt+3", () => {
+      console.log("Cmd+Alt+3 pressed. Snapping window to bottom-left corner.")
+      this.appState.snapToBottomLeft()
+    })
+
+    globalShortcut.register("CommandOrControl+Alt+4", () => {
+      console.log("Cmd+Alt+4 pressed. Snapping window to bottom-right corner.")
+      this.appState.snapToBottomRight()
+    })
+
+    // Copy last response shortcut (will be implemented via IPC)
+    globalShortcut.register("CommandOrControl+Shift+C", () => {
+      console.log("Cmd+Shift+C pressed. Copying last response to clipboard.")
+      const mainWindow = this.appState.getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send("copy-last-response")
+      }
+    })
+
     // Unregister shortcuts when quitting
     app.on("will-quit", () => {
       globalShortcut.unregisterAll()

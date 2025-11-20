@@ -123,12 +123,80 @@ export const ComplexitySection = ({
   </div>
 )
 
+const ConfidenceSection = ({
+  confidence,
+  isLoading
+}: {
+  confidence: number | null
+  isLoading: boolean
+}) => {
+  const getConfidenceColor = (score: number): string => {
+    if (score >= 0.9) return "text-green-400"
+    if (score >= 0.7) return "text-blue-400"
+    if (score >= 0.5) return "text-yellow-400"
+    if (score >= 0.3) return "text-orange-400"
+    return "text-red-400"
+  }
+
+  const getConfidenceLabel = (score: number): string => {
+    if (score >= 0.9) return "Very Confident"
+    if (score >= 0.7) return "Confident"
+    if (score >= 0.5) return "Moderate"
+    if (score >= 0.3) return "Low"
+    return "Very Low"
+  }
+
+  const getConfidenceBarWidth = (score: number): string => {
+    return `${Math.round(score * 100)}%`
+  }
+
+  return (
+    <div className="space-y-2">
+      <h2 className="text-[13px] font-medium text-white tracking-wide">
+        Confidence Score
+      </h2>
+      {isLoading ? (
+        <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+          Calculating confidence...
+        </p>
+      ) : confidence !== null ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 ${
+                    confidence >= 0.9 ? "bg-green-400" :
+                    confidence >= 0.7 ? "bg-blue-400" :
+                    confidence >= 0.5 ? "bg-yellow-400" :
+                    confidence >= 0.3 ? "bg-orange-400" : "bg-red-400"
+                  }`}
+                  style={{ width: getConfidenceBarWidth(confidence) }}
+                />
+              </div>
+            </div>
+            <div className={`text-[13px] font-medium ${getConfidenceColor(confidence)}`}>
+              {Math.round(confidence * 100)}%
+            </div>
+          </div>
+          <div className="text-[12px] text-gray-300">
+            {getConfidenceLabel(confidence)} - The AI is{" "}
+            {confidence >= 0.7 ? "fairly certain" : confidence >= 0.5 ? "moderately sure" : "less confident"}{" "}
+            about this solution
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 interface SolutionsProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug" | "settings">>
 }
 const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   const queryClient = useQueryClient()
   const contentRef = useRef<HTMLDivElement>(null)
+  const solutionDataRef = useRef<string | null>(null)
 
   // Audio recording state
   const [audioRecording, setAudioRecording] = useState(false)
@@ -145,6 +213,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   const [spaceComplexityData, setSpaceComplexityData] = useState<string | null>(
     null
   )
+  const [confidenceScore, setConfidenceScore] = useState<number | null>(null)
   const [customContent, setCustomContent] = useState<string | null>(null)
 
   const [toastOpen, setToastOpen] = useState(false)
@@ -228,7 +297,36 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
     // Set up event listeners
     const cleanupFunctions = [
-      window.electronAPI.onScreenshotTaken(() => refetch()),
+      window.electronAPI.onScreenshotTaken?.(() => refetch()),
+      window.electronAPI.onCopyLastResponse?.(() => {
+        console.log("[Solutions] Copy last response triggered")
+        console.log("[Solutions] Current solution data:", solutionDataRef.current)
+        // Copy the last solution to clipboard using ref to avoid stale closure
+        if (solutionDataRef.current) {
+          navigator.clipboard.writeText(solutionDataRef.current).then(() => {
+            console.log("[Solutions] Successfully copied to clipboard")
+            showToast(
+              "Copied!",
+              "Last response copied to clipboard",
+              "neutral"
+            )
+          }).catch(err => {
+            console.error("[Solutions] Failed to copy:", err)
+            showToast(
+              "Copy Failed",
+              "Could not copy to clipboard",
+              "error"
+            )
+          })
+        } else {
+          console.log("[Solutions] No solution data available")
+          showToast(
+            "No Response",
+            "No response available to copy",
+            "neutral"
+          )
+        }
+      }),
       window.electronAPI.onResetView(() => {
         // Set resetting state first
         setIsResetting(true)
@@ -332,7 +430,8 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
           code: data.solution.code,
           thoughts: data.solution.thoughts,
           time_complexity: data.solution.time_complexity,
-          space_complexity: data.solution.space_complexity
+          space_complexity: data.solution.space_complexity,
+          confidence: data.solution.confidence
         }
 
         queryClient.setQueryData(["solution"], solutionData)
@@ -340,6 +439,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
         setThoughtsData(solutionData.thoughts || null)
         setTimeComplexityData(solutionData.time_complexity || null)
         setSpaceComplexityData(solutionData.space_complexity || null)
+        setConfidenceScore(solutionData.confidence ?? null)
       }),
 
       //########################################################
@@ -376,9 +476,14 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
     return () => {
       resizeObserver.disconnect()
-      cleanupFunctions.forEach((cleanup) => cleanup())
+      cleanupFunctions.forEach((cleanup) => cleanup?.())
     }
   }, [isTooltipVisible, tooltipHeight])
+
+  // Update ref when solutionData changes to avoid stale closures
+  useEffect(() => {
+    solutionDataRef.current = solutionData
+  }, [solutionData])
 
   useEffect(() => {
     setProblemStatementData(
@@ -542,6 +647,10 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                             isLoading={!timeComplexityData || !spaceComplexityData}
                           />
                         )}
+                        <ConfidenceSection
+                          confidence={confidenceScore}
+                          isLoading={!confidenceScore}
+                        />
                       </>
                     )}
                   </>

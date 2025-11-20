@@ -14,6 +14,8 @@ import {
 
 interface QueueProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug" | "settings">>
+  theme: "light" | "dark" | "system"
+  setTheme: (theme: "light" | "dark" | "system") => void
 }
 
 interface UISettings {
@@ -22,7 +24,7 @@ interface UISettings {
   theme?: "dark" | "light"
 }
 
-const Queue: React.FC<QueueProps> = ({ setView }) => {
+const Queue: React.FC<QueueProps> = ({ setView, theme, setTheme }) => {
   // ============ STATE MANAGEMENT ============
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<ToastMessage>({
@@ -35,10 +37,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "gemini"; text: string }>>([])
   const [chatLoading, setChatLoading] = useState(false)
   const [attachedScreenshot, setAttachedScreenshot] = useState<{ path: string; preview: string } | null>(null)
+  const [copyingIndex, setCopyingIndex] = useState<number | null>(null)
 
   // ============ REFS ============
   const responseAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const chatMessagesRef = useRef<Array<{ role: "user" | "gemini"; text: string }>>([])
 
   // ============ API & DATA FETCHING ============
   const { data: screenshots = [], refetch } = useQuery<Array<{ path: string; preview: string }>, Error>(
@@ -80,11 +84,14 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     }
   }, [])
 
-  const copyToClipboard = useCallback((text: string) => {
+  const copyToClipboard = useCallback((text: string, index: number) => {
+    setCopyingIndex(index)
     navigator.clipboard.writeText(text).then(() => {
-      showToast("Copied", "Message copied to clipboard", "neutral")
+      showToast("✓ Copied", "Message copied to clipboard", "neutral")
+      setTimeout(() => setCopyingIndex(null), 1000)
     }).catch(() => {
-      showToast("Error", "Failed to copy to clipboard", "error")
+      showToast("✗ Error", "Failed to copy to clipboard", "error")
+      setCopyingIndex(null)
     })
   }, [showToast])
 
@@ -224,6 +231,11 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     scrollToBottom()
   }, [chatMessages, chatLoading, scrollToBottom])
 
+  // Update ref when chatMessages changes to avoid stale closures
+  useEffect(() => {
+    chatMessagesRef.current = chatMessages
+  }, [chatMessages])
+
   // ============ ELECTRON IPC LISTENERS ============
   useEffect(() => {
     const cleanup = [
@@ -236,6 +248,24 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
       window.electronAPI?.onResetView?.(() => {
         console.log("[Queue] Reset view event received")
         refetch()
+      }),
+      window.electronAPI?.onCopyLastResponse?.(() => {
+        console.log("[Queue] Copy last response triggered")
+        console.log("[Queue] Current chat messages:", chatMessagesRef.current)
+        // Get the last AI message from chat using ref to avoid stale closure
+        const lastAiMessage = [...chatMessagesRef.current].reverse().find(m => m.role === "gemini")
+        if (lastAiMessage) {
+          console.log("[Queue] Copying last AI message:", lastAiMessage.text)
+          navigator.clipboard.writeText(lastAiMessage.text).then(() => {
+            showToast("Copied!", "Last response copied to clipboard", "neutral")
+          }).catch(err => {
+            console.error("[Queue] Failed to copy:", err)
+            showToast("Copy Failed", "Could not copy to clipboard", "error")
+          })
+        } else {
+          console.log("[Queue] No AI messages available")
+          showToast("No Response", "No AI response available to copy", "neutral")
+        }
       }),
       window.electronAPI?.onSolutionError?.((error: string) => {
         console.error("[Queue] Solution error event:", error)
@@ -293,11 +323,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
                     <span className="response-card-role">AI</span>
                     <div className="response-card-actions">
                       <button
-                        className="copy-button"
-                        onClick={() => copyToClipboard(msg.text)}
+                        className={`copy-button ${copyingIndex === idx ? 'copying' : ''}`}
+                        onClick={() => copyToClipboard(msg.text, idx)}
                         title="Copy response"
+                        disabled={copyingIndex === idx}
                       >
-                        Copy
+                        {copyingIndex === idx ? '✓' : 'Copy'}
                       </button>
                     </div>
                   </div>
@@ -324,6 +355,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
                 <span className="response-card-role">AI</span>
               </div>
               <div className="loading-indicator">
+                <span className="loading-text">Thinking</span>
                 <span className="loading-dot"></span>
                 <span className="loading-dot"></span>
                 <span className="loading-dot"></span>
@@ -345,22 +377,44 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
             color: 'rgba(96, 165, 250, 0.9)',
             display: 'flex',
             alignItems: 'center',
+            gap: '10px',
             justifyContent: 'space-between'
           }}>
-            <span>📸 Screenshot attached</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <img
+                src={attachedScreenshot.preview}
+                alt="Screenshot preview"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  objectFit: 'cover',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(96, 165, 250, 0.3)'
+                }}
+              />
+              <span>📸 Screenshot attached</span>
+            </div>
             <button
               onClick={() => setAttachedScreenshot(null)}
               style={{
-                background: 'none',
-                border: 'none',
-                color: 'rgba(96, 165, 250, 0.9)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '4px',
+                color: 'rgba(239, 68, 68, 0.9)',
                 cursor: 'pointer',
-                fontSize: '14px',
-                padding: '0 4px'
+                fontSize: '12px',
+                padding: '4px 8px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
               }}
               title="Remove screenshot"
             >
-              ✕
+              Remove
             </button>
           </div>
         )}

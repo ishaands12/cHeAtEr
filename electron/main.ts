@@ -182,21 +182,52 @@ export class AppState {
     this.windowHelper.centerAndShowWindow()
   }
 
+  // Corner snap methods
+  public snapToTopLeft(): void {
+    this.windowHelper.snapToTopLeft()
+  }
+
+  public snapToTopRight(): void {
+    this.windowHelper.snapToTopRight()
+  }
+
+  public snapToBottomLeft(): void {
+    this.windowHelper.snapToBottomLeft()
+  }
+
+  public snapToBottomRight(): void {
+    this.windowHelper.snapToBottomRight()
+  }
+
+  // Opacity control
+  public setWindowOpacity(opacity: number): void {
+    this.windowHelper.setWindowOpacity(opacity)
+  }
+
+  public getWindowOpacity(): number {
+    return this.windowHelper.getWindowOpacity()
+  }
+
   public createTray(): void {
-    // Create a simple tray icon
-    const image = nativeImage.createEmpty()
-    
-    // Try to use a system template image for better integration
-    let trayImage = image
-    try {
-      // Create a minimal icon - just use an empty image and set the title
-      trayImage = nativeImage.createFromBuffer(Buffer.alloc(0))
-    } catch (error) {
-      console.log("Using empty tray image")
-      trayImage = nativeImage.createEmpty()
+    // Create a simple tray icon using a 16x16 PNG buffer
+    // This creates a small colored square as the tray icon
+    const size = 16
+    const canvas = Buffer.alloc(size * size * 4) // RGBA
+    for (let i = 0; i < size * size; i++) {
+      const offset = i * 4
+      canvas[offset] = 100     // R
+      canvas[offset + 1] = 200 // G
+      canvas[offset + 2] = 255 // B
+      canvas[offset + 3] = 255 // A
     }
-    
+
+    const trayImage = nativeImage.createFromBuffer(canvas, {
+      width: size,
+      height: size
+    })
+
     this.tray = new Tray(trayImage)
+    this.tray.setTitle('cH') // Show text in menu bar on macOS
     
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -269,6 +300,14 @@ export class AppState {
 
 // Application initialization
 async function initializeApp() {
+  console.log("Initializing app...")
+  console.log("App module:", app ? "loaded" : "undefined")
+
+  if (!app) {
+    console.error("FATAL: Electron app module failed to load")
+    process.exit(1)
+  }
+
   app.whenReady().then(() => {
     console.log("App is ready")
 
@@ -292,8 +331,12 @@ async function initializeApp() {
 
   // Quit when all windows are closed, except on macOS
   app.on("window-all-closed", () => {
+    console.log("All windows closed event triggered")
     if (process.platform !== "darwin") {
+      console.log("Quitting app (not macOS)")
       app.quit()
+    } else {
+      console.log("macOS: keeping app running in background")
     }
   })
 
@@ -302,4 +345,9 @@ async function initializeApp() {
 }
 
 // Start the application
-initializeApp().catch(console.error)
+console.log("Starting application initialization...")
+initializeApp().catch((error) => {
+  console.error("FATAL ERROR during initialization:", error)
+  console.error("Stack trace:", error.stack)
+  process.exit(1)
+})

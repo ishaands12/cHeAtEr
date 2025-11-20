@@ -18,12 +18,41 @@ const queryClient = new QueryClient({
 const App: React.FC = () => {
   const [view, setView] = useState<"queue" | "solutions" | "debug" | "settings">("queue")
   const [isElectron, setIsElectron] = useState(typeof window !== 'undefined' && !!window.electronAPI)
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("system")
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark")
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Check for Electron on mount
   useEffect(() => {
     setIsElectron(!!window.electronAPI)
   }, [])
+
+  // Theme detection and application
+  useEffect(() => {
+    const updateTheme = () => {
+      if (theme === "system") {
+        const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+        setResolvedTheme(systemPrefersDark ? "dark" : "light")
+      } else {
+        setResolvedTheme(theme)
+      }
+    }
+
+    updateTheme()
+
+    // Listen for system theme changes
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    const handler = () => updateTheme()
+    mediaQuery.addEventListener("change", handler)
+
+    return () => mediaQuery.removeEventListener("change", handler)
+  }, [theme])
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", resolvedTheme === "dark")
+    document.documentElement.classList.toggle("light", resolvedTheme === "light")
+  }, [resolvedTheme])
 
   useEffect(() => {
     if (!containerRef.current || !isElectron) return
@@ -115,11 +144,11 @@ const App: React.FC = () => {
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
             {view === "queue" ? (
-              <Queue setView={setView} />
+              <Queue setView={setView} theme={theme} setTheme={setTheme} />
             ) : view === "solutions" ? (
               <Solutions setView={setView} />
             ) : view === "settings" ? (
-              <Settings setView={setView} />
+              <Settings setView={setView} theme={theme} setTheme={setTheme} />
             ) : (
               <></>
             )}

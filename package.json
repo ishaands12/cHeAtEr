@@ -5,7 +5,7 @@
   "scripts": {
     "clean": "rimraf dist dist-electron",
     "dev": "vite",
-    "build": "npm run clean && tsc && vite build",
+    "build": "npm run clean && tsc -p electron/tsconfig.json && vite build",
     "preview": "vite preview",
     "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp",
     "electron:dev": "tsc -p electron/tsconfig.json && cross-env NODE_ENV=development electron .",
@@ -26,29 +26,18 @@
       "node_modules/**/*"
     ],
     "directories": {
-      "output": "release",
-      "buildResources": "assets"
+      "output": "release"
     },
-    "extraResources": [
-      {
-        "from": "assets/",
-        "to": "assets/"
-      }
-    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "x64",
             "arm64"
           ]
         }
-      ],
-      "icon": "assets/icons/mac/icon.icns",
-      "hardenedRuntime": true,
-      "entitlements": "assets/entitlements.mac.plist"
+      ]
     },
     "win": {
       "target": [
