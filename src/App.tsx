@@ -5,6 +5,7 @@ import { ToastViewport } from "@radix-ui/react-toast"
 import { useEffect, useRef, useState } from "react"
 import Solutions from "./_pages/Solutions"
 import { QueryClient, QueryClientProvider } from "react-query"
+import LandingPage from "./components/LandingPage"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -132,14 +133,7 @@ const App: React.FC = () => {
   return (
     <div ref={containerRef} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {!isElectron ? (
-        <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-          <div className="text-center space-y-4">
-            <div className="text-5xl">📋</div>
-            <h1 className="text-2xl font-bold text-gray-800">cHeAtEr</h1>
-            <p className="text-gray-600">This app requires Electron to run</p>
-            <p className="text-sm text-gray-500">Run: npm run app:dev</p>
-          </div>
-        </div>
+        <LandingPage />
       ) : (
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
